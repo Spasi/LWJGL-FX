@@ -1,0 +1,20 @@
+.fps-label {
+	-fx-effect: dropshadow(three-pass-box, black, 2.0, 1.0, 0.0, 0.0);
+}
+
+.canvas-controls {
+	-fx-background-color: #ffffff20;
+	-fx-background-radius: 8px;
+	-fx-border-width: 1px;
+	-fx-border-color: #FFF500;
+	-fx-border-radius: 8px;
+}
+
+.canvas-label {
+	-fx-effect: dropshadow(three-pass-box, black, 2.0, 0.75, 0.0, 0.0);
+}
+
+.slider > .axis {
+	-fx-tick-label-fill: #FFF500;
+	-fx-effect: dropshadow(three-pass-box, black, 2.0, 0.75, 0.0, 0.0);
+}

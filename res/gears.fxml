@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.collections.*?>
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.effect.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.paint.*?>
+<?import javafx.scene.text.*?>
+<?import javafx.scene.web.*?>
+<?scenebuilder-stylesheet gears.css?>
+
+<AnchorPane id="AnchorPane" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="720.0" prefWidth="1280.0" xmlns:fx="http://javafx.com/fxml" fx:controller="lwjglfx.GUIController">
+  <children>
+    <SplitPane dividerPositions="0.7003129890453834" focusTraversable="true" prefHeight="160.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+      <items>
+        <AnchorPane fx:id="gearsRoot" minHeight="300.0" minWidth="300.0" prefHeight="160.0" prefWidth="100.0" style="-fx-background-color: black;">
+          <children>
+            <ImageView id="" fx:id="gearsView" fitHeight="256.0" fitWidth="256.0" pickOnBounds="true" preserveRatio="false" scaleY="-1.0" smooth="false" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
+            <Label fx:id="fpsLabel" styleClass="fps-label" text="FPS: 1000" textFill="#fff500" AnchorPane.leftAnchor="16.0" AnchorPane.topAnchor="16.0">
+              <font>
+                <Font name="System Bold" size="18.0" />
+              </font>
+            </Label>
+            <VBox alignment="CENTER_RIGHT" minHeight="-1.0" prefHeight="-1.0" prefWidth="-1.0" spacing="8.0" style="" styleClass="canvas-controls" AnchorPane.bottomAnchor="16.0" AnchorPane.rightAnchor="16.0">
+              <children>
+                <CheckBox fx:id="vsync" allowIndeterminate="false" mnemonicParsing="false" scaleX="1.0" selected="true" styleClass="canvas-label" text="Vsync">
+                  <font>
+                    <Font size="14.0" fx:id="x1" />
+                  </font>
+                  <textFill>
+                    <Color blue="0.000" green="0.960" red="1.000" fx:id="x2" />
+                  </textFill>
+                </CheckBox>
+                <Label font="$x1" styleClass="canvas-label" text="Stream Buffering" textFill="$x2" />
+                <ChoiceBox fx:id="bufferingChoice" prefWidth="160.0">
+                  <items>
+                    <FXCollections fx:factory="observableArrayList">
+                      <String fx:value="Item 1" />
+                      <String fx:value="Item 2" />
+                      <String fx:value="Item 3" />
+                    </FXCollections>
+                  </items>
+                </ChoiceBox>
+                <Label font="$x1" styleClass="canvas-label" text="MSAA Samples" textFill="$x2" />
+                <Slider fx:id="msaaSamples" blockIncrement="1.0" majorTickUnit="1.0" max="8.0" min="1.0" minorTickCount="0" prefWidth="256.0" showTickLabels="true" showTickMarks="true" snapToTicks="true" style="" value="1.0" />
+              </children>
+              <padding>
+                <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+              </padding>
+            </VBox>
+          </children>
+        </AnchorPane>
+        <AnchorPane minHeight="0.0" minWidth="0.0" prefHeight="160.0" prefWidth="100.0">
+          <children>
+            <WebView fx:id="webView" prefHeight="200.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
+          </children>
+        </AnchorPane>
+      </items>
+    </SplitPane>
+  </children>
+</AnchorPane>

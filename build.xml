@@ -1,0 +1,169 @@
+<project
+	name="LWJGL-FX"
+	default="run"
+	basedir="."
+	xmlns:fx="javafx:com.sun.javafx.tools.ant"
+	>
+
+	<property name="JDK" location="C:/Program Files (x86)/Java/jdk1.8.0"/>
+	<property name="LWJGL_PATH" location="lib/lwjgl-2.9.0"/>
+	<property name="LWJGL_PATH_NATIVE" location="${LWJGL_PATH}/native/windows"/>
+
+	<taskdef
+		resource="com/sun/javafx/tools/ant/antlib.xml"
+		uri="javafx:com.sun.javafx.tools.ant"
+		classpath="${JDK}/lib/ant-javafx.jar"
+		/>
+
+	<property name="lib.javafx" location="${JDK}/jre/lib/jfxrt.jar"/>
+	<property name="lib.lwjgl" location="lib/lwjgl-2.9.0/jar/lwjgl.jar"/>
+
+	<property name="lib.JARS" location="${lib.javafx};${lib.lwjgl};"/>
+
+	<fx:application
+		id="LWJGLFX"
+		name="LWJGL-FX"
+		mainClass="lwjglfx.JavaFXGears"
+		/>
+
+	<fx:resources id="applicationResources">
+		<fx:fileset dir="${LWJGL_PATH}/jar" includes="lwjgl.jar"/>
+	</fx:resources>
+
+	<fx:resources id="deployResources">
+		<fx:fileset dir="RELEASE" includes="lwjgl.jar"/>
+		<fx:fileset dir="RELEASE" includes="lwjglfx.jar"/>
+
+		<!-- Native Packaging -->
+		<fx:fileset dir="${LWJGL_PATH}/native/windows" type="data" os="Windows" includes="*.dll"/>
+		<fx:fileset dir="${LWJGL_PATH}/native/linux" type="data" os="Linux" includes="*.so"/>
+		<fx:fileset dir="${LWJGL_PATH}/native/macosx" type="data" os="Mac OS X" includes="*.jnilib"/>
+
+		<!-- JNLP Deployment -->
+		<fx:fileset dir="RELEASE"
+		            type="native" os="Windows" arch="amd64"
+		            includes="lwjgl-windows-amd64.jar"/>
+		<fx:fileset dir="RELEASE"
+		            type="native" os="Windows" arch="x86 i586"
+		            includes="lwjgl-windows-x86.jar"/>
+
+		<fx:fileset dir="RELEASE"
+		            type="native" os="Linux" arch="amd64"
+		            includes="lwjgl-linux-amd64.jar"/>
+		<fx:fileset dir="RELEASE"
+		            type="native" os="Linux" arch="x86 i386"
+		            includes="lwjgl-linux-x86.jar"/>
+
+		<fx:fileset dir="RELEASE"
+		            type="native" os="Mac OS X"
+		            includes="lwjgl-macosx.jar"/>
+	</fx:resources>
+
+	<target name="clean" description="Resets the project to a clean state.">
+		<delete dir="BIN" quiet="true" failonerror="false" taskname="Cleaning BIN folder"/>
+		<delete dir="RELEASE" quiet="true" failonerror="false" taskname="Cleaning RELEASE folder"/>
+		<delete dir="DEPLOY" quiet="true" failonerror="false" taskname="Cleaning DEPLOY folder"/>
+	</target>
+
+	<target name="-initialize">
+		<mkdir dir="BIN" taskname="Initialiazing BIN folder"/>
+		<mkdir dir="RELEASE" taskname="Initialiazing RELEASE folder"/>
+		<mkdir dir="DEPLOY" taskname="Initialiazing DEPLOY folder"/>
+	</target>
+
+	<target name="compile" description="Compiles the project source code." depends="-initialize">
+		<javac debug="yes"
+		       destdir="BIN"
+		       source="1.5"
+		       target="1.5"
+		       classpath="${lib.JARS}"
+		       taskname="Compiling"
+		       includeantruntime="false"
+			>
+			<src path="SRC"/>
+			<include name="**"/>
+		</javac>
+
+		<copy todir="BIN/lwjglfx" taskname="Copying JavaFX Resources">
+			<fileset dir="src/lwjglfx" includes="*.fxml"/>
+			<fileset dir="src/lwjglfx" includes="*.css"/>
+		</copy>
+	</target>
+
+	<target name="-lwjgl-jars" description="Builds the LWJGL OS/Arch-specified jar files.">
+		<jar destfile="RELEASE/lwjgl-windows-amd64.jar">
+			<fileset dir="lib/lwjgl-2.9.0/native/windows" includes="lwjgl64.dll"/>
+		</jar>
+
+		<jar destfile="RELEASE/lwjgl-windows-x86.jar">
+			<fileset dir="lib/lwjgl-2.9.0/native/windows" includes="lwjgl.dll"/>
+		</jar>
+
+		<jar destfile="RELEASE/lwjgl-linux-amd64.jar">
+			<fileset dir="lib/lwjgl-2.9.0/native/linux" includes="liblwjgl64.so"/>
+		</jar>
+
+		<jar destfile="RELEASE/lwjgl-linux-x86.jar">
+			<fileset dir="lib/lwjgl-2.9.0/native/linux" includes="liblwjgl.so"/>
+		</jar>
+
+		<jar destfile="RELEASE/lwjgl-macosx.jar">
+			<fileset dir="lib/lwjgl-2.9.0/native/macosx" includes="liblwjgl.jnilib"/>
+		</jar>
+	</target>
+
+	<target name="jars" description="Builds the application jar files." depends="compile, -lwjgl-jars">
+		<fx:jar destfile="RELEASE/lwjglfx.jar" taskname="Building main application jar file">
+			<fx:application refid="LWJGLFX"/>
+
+			<fileset dir="BIN" includes="**"/>
+			<fx:fileset dir="res" includes="**"/>
+
+			<fx:resources refid="applicationResources"/>
+
+			<manifest>
+				<attribute name="Implementation-Vendor" value="LWJGL"/>
+				<attribute name="Implementation-Title" value="LWJGL-JavaFX Gears"/>
+				<attribute name="Implementation-Version" value="1.0"/>
+			</manifest>
+		</fx:jar>
+
+		<fx:signjar
+			taskname="Signing main application jar file"
+			destdir="RELEASE"
+			keyStore="lwjglfx.jks"
+			alias="lwjglfx"
+			storePass="lwjglfx"
+			keyPass="lwjglfx"
+			>
+			<fx:fileset dir="RELEASE" includes="*.jar"/>
+			<fx:fileset dir="lib/lwjgl-2.9.0/jar" includes="lwjgl.jar"/>
+		</fx:signjar>
+	</target>
+
+	<target name="run" description="Executes the application." depends="jars">
+		<java
+			classname="lwjglfx.JavaFXGears"
+			classpath="RELEASE/lwjglfx.jar;RELEASE/lwjgl.jar;${lib.javafx}"
+			fork="true"
+			>
+			<jvmarg line='-Dorg.lwjgl.librarypath="${LWJGL_PATH_NATIVE}"'/>
+		</java>
+	</target>
+
+	<target name="deploy" description="Generates the deployment package." depends="jars">
+		<fx:deploy width="1280" height="720"
+		           nativeBundles="exe" outdir="DEPLOY" outfile="lwjglfx"
+		           embedJNLP="true"
+		           verbose="true"
+			>
+			<fx:application refid="LWJGLFX"/>
+			<fx:resources refid="deployResources"/>
+			<fx:info title="LWJGL-JavaFX Gears" vendor="LWJGL" description="LWJGL-JavaFX integration demo"/>
+			<fx:platform basedir="${JDK}"/>
+			<fx:preferences shortcut="true" menu="true" install="true"/>
+			<fx:permissions elevated="true"/>
+		</fx:deploy>
+	</target>
+
+</project>

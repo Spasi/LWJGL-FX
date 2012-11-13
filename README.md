@@ -7,4 +7,4 @@ This repository contains an example of two-way LWJGL/JavaFX integration:
 
 The same idea could be applied to windowing systems other than JavaFX. This is what it currently looks like:
 
-![Screenshot](url:http://cloud.github.com/downloads/Spasi/LWJGL-FX/lwjgl_javafx.png)
+![Screenshot](http://cloud.github.com/downloads/Spasi/LWJGL-FX/lwjgl_javafx.png)

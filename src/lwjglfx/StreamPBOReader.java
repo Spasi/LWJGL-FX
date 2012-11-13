@@ -82,7 +82,7 @@ public class StreamPBOReader extends StreamPBO {
 
 		final ContextCapabilities caps = GLContext.getCapabilities();
 
-		if ( !(caps.OpenGL30 || caps.GL_EXT_framebuffer_object) )
+		if ( !(caps.OpenGL30 || caps.GL_ARB_framebuffer_object || caps.GL_EXT_framebuffer_object) )
 			throw new UnsupportedOperationException("Framebuffer object support is required.");
 
 		this.handler = handler;
@@ -373,7 +373,7 @@ public class StreamPBOReader extends StreamPBO {
 	}
 
 	private static FBOUtil getFBOUtil(final ContextCapabilities caps) {
-		if ( caps.OpenGL30 )
+		if ( caps.OpenGL30 || caps.GL_ARB_framebuffer_object )
 			return new FBOUtil() {
 				public int genFramebuffers() {
 					return glGenFramebuffers();

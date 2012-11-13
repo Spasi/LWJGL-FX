@@ -45,6 +45,7 @@ import javafx.beans.property.ReadOnlyFloatWrapper;
 
 import static lwjglfx.StreamPBOReader.*;
 import static lwjglfx.StreamPBOWriter.*;
+import static org.lwjgl.opengl.AMDDebugOutput.*;
 import static org.lwjgl.opengl.ARBDebugOutput.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.glGetInteger;
@@ -84,20 +85,27 @@ final class Gears {
 	Gears(final ReadHandler readHandler, final WriteHandler writeHandler) {
 		this.fps = new ReadOnlyFloatWrapper(this, "fps", 0.0f);
 
+		if ( (Pbuffer.getCapabilities() & Pbuffer.PBUFFER_SUPPORTED) == 0 )
+			throw new UnsupportedOperationException("Support for pbuffers is required.");
+
 		try {
-			pbuffer = new Pbuffer(1, 1, new PixelFormat(), null, null, new ContextAttribs(4, 2).withProfileCompatibility(true).withDebug(true));
+			pbuffer = new Pbuffer(1, 1, new PixelFormat(), null);
 			pbuffer.makeCurrent();
 		} catch (LWJGLException e) {
 			throw new RuntimeException(e);
 		}
 
 		final ContextCapabilities caps = GLContext.getCapabilities();
+
 		if ( caps.OpenGL30 || (caps.GL_EXT_framebuffer_multisample && caps.GL_EXT_framebuffer_blit) )
 			maxSamples = glGetInteger(GL_MAX_SAMPLES);
 		else
 			maxSamples = 1;
 
-		glDebugMessageCallbackARB(new ARBDebugOutputCallback());
+		if ( caps.GL_ARB_debug_output )
+			glDebugMessageCallbackARB(new ARBDebugOutputCallback());
+		else if ( caps.GL_AMD_debug_output )
+			glDebugMessageCallbackAMD(new AMDDebugOutputCallback());
 
 		streamPBOReader = new StreamPBOReader(readHandler, 1, transfersToBuffer);
 		streamPBOWriter = new StreamPBOWriter(writeHandler, transfersToBuffer);

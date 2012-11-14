@@ -40,8 +40,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javafx.application.Platform;
-import javafx.beans.property.ReadOnlyFloatProperty;
-import javafx.beans.property.ReadOnlyFloatWrapper;
+import javafx.beans.property.ReadOnlyIntegerProperty;
+import javafx.beans.property.ReadOnlyIntegerWrapper;
 
 import static lwjglfx.StreamPBOReader.*;
 import static lwjglfx.StreamPBOWriter.*;
@@ -61,7 +61,7 @@ final class Gears {
 	private final Pbuffer pbuffer;
 	private final int     maxSamples;
 
-	private final ReadOnlyFloatWrapper fps;
+	private final ReadOnlyIntegerWrapper fps;
 
 	private StreamPBOReader streamPBOReader;
 	private StreamPBOWriter streamPBOWriter;
@@ -83,13 +83,13 @@ final class Gears {
 	private       long       snapshotCurrent;
 
 	Gears(final ReadHandler readHandler, final WriteHandler writeHandler) {
-		this.fps = new ReadOnlyFloatWrapper(this, "fps", 0.0f);
+		this.fps = new ReadOnlyIntegerWrapper(this, "fps", 0);
 
 		if ( (Pbuffer.getCapabilities() & Pbuffer.PBUFFER_SUPPORTED) == 0 )
 			throw new UnsupportedOperationException("Support for pbuffers is required.");
 
 		try {
-			pbuffer = new Pbuffer(1, 1, new PixelFormat(), null);
+			pbuffer = new Pbuffer(1, 1, new PixelFormat(), null, null, new ContextAttribs().withDebug(true));
 			pbuffer.makeCurrent();
 		} catch (LWJGLException e) {
 			throw new RuntimeException(e);
@@ -175,7 +175,7 @@ final class Gears {
 		destroy();
 	}
 
-	public ReadOnlyFloatProperty fpsProperty() {
+	public ReadOnlyIntegerProperty fpsProperty() {
 		return fps.getReadOnlyProperty();
 	}
 
@@ -191,6 +191,10 @@ final class Gears {
 
 	public void setVsync(final boolean vsync) {
 		this.vsync = vsync;
+	}
+
+	public int getTransfersToBuffer() {
+		return transfersToBuffer;
 	}
 
 	public void setTransfersToBuffer(final int transfersToBuffer) {
@@ -210,18 +214,15 @@ final class Gears {
 	}
 
 	private void loop(final CountDownLatch running) {
-		final long FPS_UPD_INTERVAL = 1000;
+		final long FPS_UPD_INTERVAL = 1 * (1000L * 1000L * 1000L);
 
-		long nextFPSUpdateTime = System.currentTimeMillis() + FPS_UPD_INTERVAL;
-		long fps = 0;
+		long nextFPSUpdateTime = System.nanoTime() + FPS_UPD_INTERVAL;
+		int frames = 0;
 
 		long lastTime = System.nanoTime();
+		double timeDelta = 0.0;
 
 		while ( 0 < running.getCount() ) {
-			final long currentTime = System.nanoTime();
-			final double timeDelta = (currentTime - lastTime) / 1000000.0;
-			lastTime = currentTime;
-
 			angle += 0.1f * timeDelta; // 0.1 degrees per ms == 100 degrees per second
 
 			if ( resetStreams ) {
@@ -280,18 +281,22 @@ final class Gears {
 
 			glPopMatrix();
 
-			fps++;
-			if ( nextFPSUpdateTime <= System.currentTimeMillis() ) {
-				long timeUsed = FPS_UPD_INTERVAL - (System.currentTimeMillis() - nextFPSUpdateTime);
-				nextFPSUpdateTime = System.currentTimeMillis() + FPS_UPD_INTERVAL;
+			final long currentTime = System.nanoTime();
+			timeDelta = (currentTime - lastTime) / 1000000.0;
+			lastTime = currentTime;
 
-				final float fpsAverage = fps / (timeUsed / 1000f);
+			frames++;
+			if ( nextFPSUpdateTime <= currentTime ) {
+				long timeUsed = FPS_UPD_INTERVAL - (currentTime - nextFPSUpdateTime);
+				nextFPSUpdateTime = currentTime + FPS_UPD_INTERVAL;
+
+				final int fpsAverage = (int)(frames * (1000L * 1000L * 1000L) / (timeUsed));
 				Platform.runLater(new Runnable() {
 					public void run() {
 						Gears.this.fps.set(fpsAverage);
 					}
 				});
-				fps = 0;
+				frames = 0;
 			}
 
 			streamPBOReader.nextFrame();

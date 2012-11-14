@@ -32,7 +32,7 @@
 package lwjglfx;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.*;
@@ -112,8 +112,8 @@ public class StreamPBOWriter extends StreamPBO {
 
 		// Back-pressure. Make sure we never buffer more than <transfersToBuffer> frames ahead.
 
-		if ( latches[trgPBO] != null ) {
-			waitOnLatch(trgPBO);
+		if ( mappingState.get(trgPBO) ) {
+			waitForProcessingToComplete(trgPBO);
 			upload(trgPBO);
 		}
 
@@ -126,16 +126,22 @@ public class StreamPBOWriter extends StreamPBO {
 			pinnedBuffer = pinnedBuffers[trgPBO];
 		} else {
 			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[trgPBO]);
-			// The buffer will be unmapped in waitOnLatch
+			// We don't need to manually synchronized here, MapBuffer will block until TexSubImage2D has finished.
+			// The buffer will be unmapped in waitForProcessingToComplete
 			pinnedBuffer = (pinnedBuffers[trgPBO] = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY, width * height * 4, pinnedBuffers[trgPBO]));
 		}
 
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
 		// Send the buffer for processing
+
+		mappingState.set(trgPBO, true);
+		semaphores[trgPBO].acquireUninterruptibly();
 
 		handler.process(
 			width, height,
 			pinnedBuffer,
-			latches[trgPBO] = new CountDownLatch(1)
+			semaphores[trgPBO]
 		);
 
 		bufferIndex++;
@@ -146,6 +152,8 @@ public class StreamPBOWriter extends StreamPBO {
 
 		if ( !USE_AMD_PINNED_MEMORY )
 			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+
+		mappingState.set(srcPBO, false);
 
 		// Asynchronously upload current update
 
@@ -165,17 +173,15 @@ public class StreamPBOWriter extends StreamPBO {
 		glBindTexture(GL_TEXTURE_2D, texID);
 
 		final int srcPBO = (int)(currentIndex % transfersToBuffer);
-		if ( latches[srcPBO] == null )
+		if ( !mappingState.get(srcPBO) )
 			return;
 
 		if ( resetTexture ) // Synchronize to show the first frame immediately
-			waitOnLatch(srcPBO);
-		else {
-			if ( 0 < latches[srcPBO].getCount() )
-				return;
-
-			latches[srcPBO] = null;
-		}
+			waitForProcessingToComplete(srcPBO);
+		else if ( semaphores[srcPBO].tryAcquire() ) // Non-blocking
+			semaphores[srcPBO].release(); // Give it back
+		else // Give-up, try again next frame
+			return;
 
 		upload(srcPBO);
 
@@ -183,14 +189,13 @@ public class StreamPBOWriter extends StreamPBO {
 	}
 
 	private void destroyRoundRobinObjects() {
-		for ( int i = 0; i < latches.length; i++ ) {
-			if ( latches[i] != null ) {
-				waitOnLatch(i);
+		for ( int i = 0; i < semaphores.length; i++ ) {
+			waitForProcessingToComplete(i);
 
-				if ( !USE_AMD_PINNED_MEMORY ) {
-					glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[i]);
-					glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-				}
+			if ( !USE_AMD_PINNED_MEMORY && mappingState.get(i) ) {
+				glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[i]);
+				glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+				mappingState.set(i, false);
 			}
 		}
 
@@ -220,7 +225,7 @@ public class StreamPBOWriter extends StreamPBO {
 
 		int getHeight();
 
-		void process(final int width, final int height, ByteBuffer buffer, CountDownLatch signal);
+		void process(final int width, final int height, ByteBuffer buffer, Semaphore signal);
 
 	}
 

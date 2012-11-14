@@ -40,7 +40,8 @@ import org.lwjgl.opengl.GLSync;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
-import java.util.concurrent.CountDownLatch;
+import java.util.BitSet;
+import java.util.concurrent.Semaphore;
 
 import sun.misc.Unsafe;
 
@@ -58,8 +59,10 @@ abstract class StreamPBO {
 	protected final int[]        pbos;
 	protected final ByteBuffer[] pinnedBuffers;
 
-	protected final GLSync[]         fences; // Required for PBO mapping synchronization
-	protected final CountDownLatch[] latches; // Required for synchronization with the processing thread
+	protected final BitSet      mappingState; // Whether a PBO is mapped or not.
+	protected final Semaphore[] semaphores; // Required for synchronization with the processing thread
+
+	protected final GLSync[] fences; // Required for PBO mapping synchronization
 
 	protected final boolean USE_AMD_PINNED_MEMORY;
 
@@ -81,7 +84,10 @@ abstract class StreamPBO {
 
 		pbos = new int[transfersToBuffer];
 		pinnedBuffers = new ByteBuffer[transfersToBuffer];
-		latches = new CountDownLatch[transfersToBuffer];
+		mappingState = new BitSet(transfersToBuffer);
+		semaphores = new Semaphore[transfersToBuffer];
+		for ( int i = 0; i < semaphores.length; i++ )
+			semaphores[i] = new Semaphore(1, false);
 
 		USE_AMD_PINNED_MEMORY = caps.GL_AMD_pinned_memory && (caps.OpenGL32 || caps.GL_ARB_sync);
 
@@ -120,13 +126,19 @@ abstract class StreamPBO {
 		glBindBuffer(bufferTarget, 0);
 	}
 
-	protected void waitOnLatch(final int index) {
-		try {
-			latches[index].await();
-			latches[index] = null;
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+	protected void waitForProcessingToComplete(final int index) {
+		if ( !mappingState.get(index) )
+			return;
+
+		final Semaphore s = semaphores[index];
+		// Early-out: start-up or handler has finished processing
+		if ( s.availablePermits() == 1 )
+			return;
+
+		// This will block until handler has finished processing
+		s.acquireUninterruptibly();
+		// Give the permit back
+		s.release();
 	}
 
 	protected final void waitOnFence(final int index) {

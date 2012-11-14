@@ -36,11 +36,12 @@ import java.nio.ByteBuffer;
 import java.util.ResourceBundle;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
-import javafx.beans.property.ReadOnlyFloatProperty;
+import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.event.*;
@@ -96,7 +97,6 @@ public class GUIController implements Initializable {
 		gearsView.fitHeightProperty().bind(gearsRoot.heightProperty());
 
 		bufferingChoice.setItems(observableArrayList(BufferingChoice.values()));
-		bufferingChoice.getSelectionModel().select(BufferingChoice.DOUBLE);
 	}
 
 	private ReadHandler getReadHandler() {
@@ -110,27 +110,27 @@ public class GUIController implements Initializable {
 				return (int)gearsView.getFitHeight();
 			}
 
-			public void process(final int width, final int height, final ByteBuffer data, final CountDownLatch signal) {
+			public void process(final int width, final int height, final ByteBuffer data, final Semaphore signal) {
 				// This method runs in the background rendering thread
 				Platform.runLater(new Runnable() {
 					public void run() {
-						// If we're quitting, discard update
-						if ( !gearsView.isVisible() ) {
-							signal.countDown();
-							return;
+						try {
+							// If we're quitting, discard update
+							if ( !gearsView.isVisible() )
+								return;
+
+							// Detect resize and recreate the image
+							if ( renderImage == null || (int)renderImage.getWidth() != width || (int)renderImage.getHeight() != height ) {
+								renderImage = new WritableImage(width, height);
+								gearsView.setImage(renderImage);
+							}
+
+							// Upload the image to JavaFX
+							renderImage.getPixelWriter().setPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), data, width * 4);
+						} finally {
+							// Notify the render thread that we're done processing
+							signal.release();
 						}
-
-						// Detect resize and recreate the image
-						if ( renderImage == null || (int)renderImage.getWidth() != width || (int)renderImage.getHeight() != height ) {
-							renderImage = new WritableImage(width, height);
-							gearsView.setImage(renderImage);
-						}
-
-						// Upload the image to JavaFX
-						renderImage.getPixelWriter().setPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), data, width * 4);
-
-						// Notify the render thread that we're done processing
-						signal.countDown();
 					}
 				});
 			}
@@ -147,7 +147,7 @@ public class GUIController implements Initializable {
 				return (int)webView.getHeight();
 			}
 
-			public void process(final int width, final int height, final ByteBuffer buffer, final CountDownLatch signal) {
+			public void process(final int width, final int height, final ByteBuffer buffer, final Semaphore signal) {
 				// This method runs in the background rendering thread
 				Platform.runLater(new Runnable() {
 					public void run() {
@@ -157,7 +157,7 @@ public class GUIController implements Initializable {
 						webView.snapshot(new Callback<SnapshotResult, Void>() {
 							public Void call(final SnapshotResult snapshotResult) {
 								snapshotResult.getImage().getPixelReader().getPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), buffer, width * 4);
-								signal.countDown();
+								signal.release();
 								return null;
 
 							}
@@ -183,13 +183,15 @@ public class GUIController implements Initializable {
 		Platform.runLater(new Runnable() {
 			public void run() {
 				// Listen for FPS changes and update the fps label
-				final ReadOnlyFloatProperty fps = gears.fpsProperty();
+				final ReadOnlyIntegerProperty fps = gears.fpsProperty();
 
 				fpsLabel.textProperty().bind(createStringBinding(new Callable<String>() {
 					public String call() throws Exception {
 						return "FPS: " + fps.get();
 					}
 				}, fps));
+
+				bufferingChoice.getSelectionModel().select(gears.getTransfersToBuffer() - 1);
 
 				vsync.selectedProperty().addListener(new ChangeListener<Boolean>() {
 					public void changed(final ObservableValue<? extends Boolean> observableValue, final Boolean oldValue, final Boolean newValue) {

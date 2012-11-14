@@ -35,7 +35,7 @@ import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GLContext;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 
 import static org.lwjgl.opengl.EXTFramebufferBlit.*;
 import static org.lwjgl.opengl.EXTFramebufferMultisample.*;
@@ -200,14 +200,13 @@ public class StreamPBOReader extends StreamPBO {
 		}
 
 		final int trgPBO = (int)(bufferIndex % transfersToBuffer);
-		final int srcPBO = (int)((bufferIndex + 1) % transfersToBuffer);
+		final int srcPBO = (int)((bufferIndex - 1) % transfersToBuffer);
 
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[trgPBO]);
 
 		// Back-pressure. Make sure we never buffer more than <transfersToBuffer> frames ahead.
 
-		if ( latches[trgPBO] != null )
-			waitOnLatch(trgPBO);
+		waitForProcessingToComplete(trgPBO);
 
 		// Asynchronously transfer current frame
 
@@ -237,7 +236,8 @@ public class StreamPBOReader extends StreamPBO {
 			pinnedBuffer = pinnedBuffers[srcPBO];
 		} else {
 			glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[srcPBO]);
-			// The buffer will be unmapped in waitOnLatch
+			// We don't need to manually synchronized here, MapBuffer will block until ReadPixels above has finished.
+			// The buffer will be unmapped in waitForProcessingToComplete
 			pinnedBuffer = (pinnedBuffers[srcPBO] = glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY, width * height * 4, pinnedBuffers[srcPBO]));
 		}
 
@@ -245,10 +245,13 @@ public class StreamPBOReader extends StreamPBO {
 
 		// Send the buffer for processing
 
+		mappingState.set(srcPBO, true);
+		semaphores[srcPBO].acquireUninterruptibly();
+
 		handler.process(
 			width, height,
 			pinnedBuffer,
-			latches[srcPBO] = new CountDownLatch(1)
+			semaphores[srcPBO]
 		);
 
 		bufferIndex++;
@@ -287,25 +290,34 @@ public class StreamPBOReader extends StreamPBO {
 		}
 	}
 
-	protected void waitOnLatch(final int index) {
+	protected void waitForProcessingToComplete(final int index) {
+		if ( !mappingState.get(index) )
+			return;
+
+		final Semaphore s = semaphores[index];
 		try {
-			latches[index].await();
-			latches[index] = null;
+			// Early-out: start-up or handler has finished processing
+			if ( s.availablePermits() == 1 )
+				return;
+
+			// This will block until handler has finished processing
+			s.acquireUninterruptibly();
+			// Give the permit back
+			s.release();
+		} finally {
 			if ( !USE_AMD_PINNED_MEMORY )
 				glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
+
+			mappingState.set(index, false);
 		}
 	}
 
 	private void destroyRoundRobinObjects() {
-		for ( int i = 0; i < latches.length; i++ ) {
-			if ( latches[i] != null ) {
-				if ( !USE_AMD_PINNED_MEMORY )
-					glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[i]);
+		for ( int i = 0; i < semaphores.length; i++ ) {
+			if ( !USE_AMD_PINNED_MEMORY )
+				glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[i]);
 
-				waitOnLatch(i);
-			}
+			waitForProcessingToComplete(i);
 		}
 
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -344,7 +356,7 @@ public class StreamPBOReader extends StreamPBO {
 
 		int getHeight();
 
-		void process(final int width, final int height, ByteBuffer data, CountDownLatch signal);
+		void process(final int width, final int height, ByteBuffer data, Semaphore signal);
 
 	}
 

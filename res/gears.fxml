@@ -15,19 +15,29 @@
 
 <AnchorPane id="AnchorPane" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="720.0" prefWidth="1280.0" xmlns:fx="http://javafx.com/fxml" fx:controller="lwjglfx.GUIController">
   <children>
-    <SplitPane dividerPositions="0.7003129890453834" focusTraversable="true" prefHeight="160.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+    <SplitPane dividerPositions="0.6502347417840375" focusTraversable="true" prefHeight="160.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
       <items>
         <AnchorPane fx:id="gearsRoot" minHeight="300.0" minWidth="300.0" prefHeight="160.0" prefWidth="100.0" style="-fx-background-color: black;">
           <children>
             <ImageView id="" fx:id="gearsView" fitHeight="256.0" fitWidth="256.0" pickOnBounds="true" preserveRatio="false" scaleY="-1.0" smooth="false" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
-            <Label fx:id="fpsLabel" styleClass="fps-label" text="FPS: 1000" textFill="#fff500" AnchorPane.leftAnchor="16.0" AnchorPane.topAnchor="16.0">
+            <Label fx:id="fpsLabel" styleClass="fps-label" text="FPS: 1000" AnchorPane.leftAnchor="16.0" AnchorPane.topAnchor="16.0">
               <font>
                 <Font name="System Bold" size="18.0" />
               </font>
+              <textFill>
+                <Color blue="0.000" green="0.961" red="1.000" fx:id="x3" />
+              </textFill>
             </Label>
+            <Label id="" fx:id="glInfoLabel" styleClass="canvas-label" text="OpenGL Info" textFill="$x3" AnchorPane.bottomAnchor="16.0" AnchorPane.leftAnchor="16.0">
+              <font>
+                <Font name="System Bold" size="14.0" fx:id="x4" />
+              </font>
+            </Label>
+            <Label id="" fx:id="javaInfoLabel" font="$x4" styleClass="canvas-label" text="Java Info" textFill="$x3" AnchorPane.bottomAnchor="48.0" AnchorPane.leftAnchor="16.0" />
+            <Label id="" fx:id="systemInfoLabel" font="$x4" styleClass="canvas-label" text="System Info" textFill="$x3" AnchorPane.bottomAnchor="32.0" AnchorPane.leftAnchor="16.0" />
             <VBox alignment="CENTER_RIGHT" minHeight="-1.0" prefHeight="-1.0" prefWidth="-1.0" spacing="8.0" style="" styleClass="canvas-controls" AnchorPane.bottomAnchor="16.0" AnchorPane.rightAnchor="16.0">
               <children>
-                <CheckBox fx:id="vsync" allowIndeterminate="false" mnemonicParsing="false" scaleX="1.0" selected="true" styleClass="canvas-label" text="Vsync">
+                <CheckBox fx:id="vsync" allowIndeterminate="false" mnemonicParsing="false" scaleX="1.0" selected="true" styleClass="canvas-label" text="Display.sync(60)">
                   <font>
                     <Font size="14.0" fx:id="x1" />
                   </font>
@@ -35,6 +45,26 @@
                     <Color blue="0.000" green="0.960" red="1.000" fx:id="x2" />
                   </textFill>
                 </CheckBox>
+                <Label font="$x1" styleClass="canvas-label" text="Render Stream Type" textFill="$x3" />
+                <ChoiceBox fx:id="renderChoice" prefWidth="160.0">
+                  <items>
+                    <FXCollections fx:factory="observableArrayList">
+                      <String fx:value="Item 1" />
+                      <String fx:value="Item 2" />
+                      <String fx:value="Item 3" />
+                    </FXCollections>
+                  </items>
+                </ChoiceBox>
+                <Label font="$x1" styleClass="canvas-label" text="Texture Stream Type" textFill="$x3" />
+                <ChoiceBox fx:id="textureChoice" prefWidth="160.0">
+                  <items>
+                    <FXCollections fx:factory="observableArrayList">
+                      <String fx:value="Item 1" />
+                      <String fx:value="Item 2" />
+                      <String fx:value="Item 3" />
+                    </FXCollections>
+                  </items>
+                </ChoiceBox>
                 <Label font="$x1" styleClass="canvas-label" text="Stream Buffering" textFill="$x2" />
                 <ChoiceBox fx:id="bufferingChoice" prefWidth="160.0">
                   <items>
@@ -46,7 +76,7 @@
                   </items>
                 </ChoiceBox>
                 <Label font="$x1" styleClass="canvas-label" text="MSAA Samples" textFill="$x2" />
-                <Slider fx:id="msaaSamples" blockIncrement="1.0" majorTickUnit="1.0" max="8.0" min="1.0" minorTickCount="0" prefWidth="256.0" showTickLabels="true" showTickMarks="true" snapToTicks="true" style="" value="1.0" />
+                <Slider fx:id="msaaSamples" blockIncrement="1.0" majorTickUnit="1.0" max="8.0" min="1.0" minorTickCount="0" prefWidth="160.0" showTickLabels="true" showTickMarks="true" snapToTicks="true" style="" value="1.0" />
               </children>
               <padding>
                 <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />

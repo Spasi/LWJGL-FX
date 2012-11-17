@@ -5,7 +5,7 @@
 	xmlns:fx="javafx:com.sun.javafx.tools.ant"
 	>
 
-	<property name="JDK" location="C:/Program Files (x86)/Java/jdk1.8.0"/>
+	<property name="JDK" location="C:/Program Files (x86)/Java/jdk1.7.0"/>
 	<property name="LWJGL_PATH" location="lib/lwjgl-2.9.0"/>
 	<property name="LWJGL_PATH_NATIVE" location="${LWJGL_PATH}/native/windows"/>
 
@@ -74,8 +74,8 @@
 	<target name="compile" description="Compiles the project source code." depends="-initialize">
 		<javac debug="yes"
 		       destdir="BIN"
-		       source="1.5"
-		       target="1.5"
+		       source="1.6"
+		       target="1.6"
 		       classpath="${lib.JARS}"
 		       taskname="Compiling"
 		       includeantruntime="false"
@@ -117,7 +117,7 @@
 			<fx:application refid="LWJGLFX"/>
 
 			<fileset dir="BIN" includes="**"/>
-			<fx:fileset dir="res" includes="**"/>
+			<fx:fileset dir="res" includes="**" excludes="*.bak"/>
 
 			<fx:resources refid="applicationResources"/>
 
@@ -147,7 +147,7 @@
 			classpath="RELEASE/lwjglfx.jar;RELEASE/lwjgl.jar;${lib.javafx}"
 			fork="true"
 			>
-			<jvmarg line='-Dorg.lwjgl.librarypath="${LWJGL_PATH_NATIVE}"'/>
+			<jvmarg line='-server -Dorg.lwjgl.librarypath="${LWJGL_PATH_NATIVE}"'/>
 		</java>
 	</target>
 
@@ -159,7 +159,9 @@
 			>
 			<fx:application refid="LWJGLFX"/>
 			<fx:resources refid="deployResources"/>
-			<fx:info title="LWJGL-JavaFX Gears" vendor="LWJGL" description="LWJGL-JavaFX integration demo"/>
+			<fx:info title="LWJGL-JavaFX Gears" vendor="LWJGL" description="LWJGL-JavaFX integration demo">
+				<fx:icon href="lwjgl_32x32.png"/>
+			</fx:info>
 			<fx:platform basedir="${JDK}"/>
 			<fx:preferences shortcut="true" menu="true" install="true"/>
 			<fx:permissions elevated="true"/>

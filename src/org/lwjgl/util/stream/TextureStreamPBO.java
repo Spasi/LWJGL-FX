@@ -29,21 +29,15 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package lwjglfx;
-
-import java.nio.ByteBuffer;
-import java.util.concurrent.Semaphore;
+package org.lwjgl.util.stream;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.*;
 import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL21.*;
-import static org.lwjgl.opengl.GL32.*;
 
 /** Implements streaming PBO updates to an OpenGL texture. */
-public class StreamPBOWriter extends StreamPBO {
-
-	private final WriteHandler handler;
+abstract class TextureStreamPBO extends StreamBufferedPBO implements TextureStream {
 
 	private final int texID;
 
@@ -51,14 +45,8 @@ public class StreamPBOWriter extends StreamPBO {
 
 	private boolean resetTexture;
 
-	public StreamPBOWriter(final WriteHandler handler) {
-		this(handler, 2);
-	}
-
-	public StreamPBOWriter(final WriteHandler handler, final int updatesToBuffer) {
-		super(updatesToBuffer);
-
-		this.handler = handler;
+	protected TextureStreamPBO(final StreamHandler handler, final int transfersToBuffer) {
+		super(handler, transfersToBuffer);
 
 		texID = glGenTextures();
 		glBindTexture(GL_TEXTURE_2D, texID);
@@ -67,18 +55,28 @@ public class StreamPBOWriter extends StreamPBO {
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
 
-	public WriteHandler getHandler() {
+	public StreamHandler getHandler() {
 		return handler;
+	}
+
+	public int getWidth() {
+		return width;
+	}
+
+	public int getHeight() {
+		return height;
 	}
 
 	private void resize(final int width, final int height) {
 		if ( width < 0 || height < 0 )
 			throw new IllegalArgumentException("Invalid dimensions: " + width + " x " + height);
 
-		destroyRoundRobinObjects();
+		destroyObjects();
 
 		this.width = width;
 		this.height = height;
+
+		this.stride = StreamUtil.getStride(width);
 
 		if ( width == 0 || height == 0 )
 			return;
@@ -90,18 +88,14 @@ public class StreamPBOWriter extends StreamPBO {
 
 		// Setup upload buffers
 
-		resizeBuffers(width, height, GL_PIXEL_UNPACK_BUFFER, GL_STREAM_DRAW);
+		resizeBuffers(height, stride);
 	}
 
-	public int getWidth() {
-		return width;
+	protected void resizeBuffers(final int height, final int stride) {
+		super.resizeBuffers(height, stride, GL_PIXEL_UNPACK_BUFFER, GL_STREAM_DRAW);
 	}
 
-	public int getHeight() {
-		return height;
-	}
-
-	public void nextFrame() {
+	public void snapshot() {
 		if ( width != handler.getWidth() || height != handler.getHeight() )
 			resize(handler.getWidth(), handler.getHeight());
 
@@ -112,90 +106,85 @@ public class StreamPBOWriter extends StreamPBO {
 
 		// Back-pressure. Make sure we never buffer more than <transfersToBuffer> frames ahead.
 
-		if ( mappingState.get(trgPBO) ) {
+		if ( processingState.get(trgPBO) ) {
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[trgPBO]);
 			waitForProcessingToComplete(trgPBO);
 			upload(trgPBO);
 		}
 
-		final ByteBuffer pinnedBuffer;
-		if ( USE_AMD_PINNED_MEMORY ) {
-			if ( fences[trgPBO] != null ) // Wait for TexSubImage from the trgPBO to complete
-				waitOnFence(trgPBO);
-
-			// Just return the trgPBO buffer
-			pinnedBuffer = pinnedBuffers[trgPBO];
-		} else {
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[trgPBO]);
-			// We don't need to manually synchronized here, MapBuffer will block until TexSubImage2D has finished.
-			// The buffer will be unmapped in waitForProcessingToComplete
-			pinnedBuffer = (pinnedBuffers[trgPBO] = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY, width * height * 4, pinnedBuffers[trgPBO]));
-		}
-
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+		pinBuffer(trgPBO);
 
 		// Send the buffer for processing
 
-		mappingState.set(trgPBO, true);
+		processingState.set(trgPBO, true);
 		semaphores[trgPBO].acquireUninterruptibly();
 
 		handler.process(
 			width, height,
-			pinnedBuffer,
+			pinnedBuffers[trgPBO],
+			stride,
 			semaphores[trgPBO]
 		);
 
 		bufferIndex++;
 	}
 
+	protected abstract void pinBuffer(final int index);
+
+	public void tick() {
+		final int srcPBO = (int)(currentIndex % transfersToBuffer);
+		if ( !processingState.get(srcPBO) )
+			return;
+
+		if ( resetTexture ) { // Synchronize to show the first frame immediately
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
+			waitForProcessingToComplete(srcPBO);
+
+			upload(srcPBO);
+
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+		} else if ( semaphores[srcPBO].tryAcquire() ) { // Non-blocking
+			semaphores[srcPBO].release(); // Give it back
+
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
+			postProcess(srcPBO);
+			processingState.set(srcPBO, false);
+
+			upload(srcPBO);
+
+			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+		} // Give-up, try again next frame
+	}
+
 	private void upload(final int srcPBO) {
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
-
-		if ( !USE_AMD_PINNED_MEMORY )
-			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-
-		mappingState.set(srcPBO, false);
-
 		// Asynchronously upload current update
 
+		glBindTexture(GL_TEXTURE_2D, texID);
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, stride >> 2);
 		if ( resetTexture ) {
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
 			resetTexture = false;
 		} else
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
 
-		if ( USE_AMD_PINNED_MEMORY )
-			fences[srcPBO] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		postUpload(srcPBO);
 
 		currentIndex++;
 	}
 
+	protected abstract void postUpload(int index);
+
 	public void bind() {
 		glBindTexture(GL_TEXTURE_2D, texID);
-
-		final int srcPBO = (int)(currentIndex % transfersToBuffer);
-		if ( !mappingState.get(srcPBO) )
-			return;
-
-		if ( resetTexture ) // Synchronize to show the first frame immediately
-			waitForProcessingToComplete(srcPBO);
-		else if ( semaphores[srcPBO].tryAcquire() ) // Non-blocking
-			semaphores[srcPBO].release(); // Give it back
-		else // Give-up, try again next frame
-			return;
-
-		upload(srcPBO);
-
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 	}
 
-	private void destroyRoundRobinObjects() {
+	protected void destroyObjects() {
 		for ( int i = 0; i < semaphores.length; i++ ) {
-			waitForProcessingToComplete(i);
-
-			if ( !USE_AMD_PINNED_MEMORY && mappingState.get(i) ) {
+			if ( processingState.get(i) ) {
 				glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[i]);
-				glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-				mappingState.set(i, false);
+				waitForProcessingToComplete(i);
 			}
 		}
 
@@ -205,28 +194,10 @@ public class StreamPBOWriter extends StreamPBO {
 			if ( pbos[i] != 0 )
 				glDeleteBuffers(pbos[i]);
 		}
-
-		if ( fences == null )
-			return;
-
-		for ( int i = 0; i < fences.length; i++ ) {
-			if ( fences[i] != null )
-				waitOnFence(i);
-		}
 	}
 
 	public void destroy() {
-		destroyRoundRobinObjects();
-	}
-
-	public interface WriteHandler {
-
-		int getWidth();
-
-		int getHeight();
-
-		void process(final int width, final int height, ByteBuffer buffer, Semaphore signal);
-
+		destroyObjects();
 	}
 
 }

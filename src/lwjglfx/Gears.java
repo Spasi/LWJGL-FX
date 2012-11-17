@@ -1,4 +1,4 @@
-/*
+package lwjglfx;/*
  * Copyright (c) 2002-2012 LWJGL Project
  * All rights reserved.
  *
@@ -29,13 +29,19 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package lwjglfx;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLException;
 import org.lwjgl.opengl.*;
+import org.lwjgl.util.stream.RenderStream;
+import org.lwjgl.util.stream.StreamHandler;
+import org.lwjgl.util.stream.StreamUtil;
+import org.lwjgl.util.stream.StreamUtil.RenderStreamFactory;
+import org.lwjgl.util.stream.StreamUtil.TextureStreamFactory;
+import org.lwjgl.util.stream.TextureStream;
 
 import java.nio.FloatBuffer;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -43,8 +49,6 @@ import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 
-import static lwjglfx.StreamPBOReader.*;
-import static lwjglfx.StreamPBOWriter.*;
 import static org.lwjgl.opengl.AMDDebugOutput.*;
 import static org.lwjgl.opengl.ARBDebugOutput.*;
 import static org.lwjgl.opengl.GL11.*;
@@ -58,13 +62,20 @@ final class Gears {
 	private static final float VIEW_ROT_Y = 25.0f;
 	private static final float VIEW_ROT_Z = 0.0f;
 
+	static Drawable drawable;
+
+	private final ConcurrentLinkedQueue<Runnable> pendingRunnables;
+
 	private final Pbuffer pbuffer;
 	private final int     maxSamples;
 
 	private final ReadOnlyIntegerWrapper fps;
 
-	private StreamPBOReader streamPBOReader;
-	private StreamPBOWriter streamPBOWriter;
+	private RenderStreamFactory renderStreamFactory;
+	private RenderStream        renderStream;
+
+	private TextureStreamFactory textureStreamFactory;
+	private TextureStream        textureStream;
 
 	private int gear1;
 	private int gear2;
@@ -74,15 +85,15 @@ final class Gears {
 
 	private boolean vsync = true;
 
-	private int transfersToBuffer = 2;
+	private int transfersToBuffer = 3;
 	private int samples           = 1;
-
-	private boolean resetStreams;
 
 	private final AtomicLong snapshotRequest;
 	private       long       snapshotCurrent;
 
-	Gears(final ReadHandler readHandler, final WriteHandler writeHandler) {
+	Gears(final StreamHandler readHandler, final StreamHandler writeHandler) {
+		this.pendingRunnables = new ConcurrentLinkedQueue<Runnable>();
+
 		this.fps = new ReadOnlyIntegerWrapper(this, "fps", 0);
 
 		if ( (Pbuffer.getCapabilities() & Pbuffer.PBUFFER_SUPPORTED) == 0 )
@@ -94,6 +105,8 @@ final class Gears {
 		} catch (LWJGLException e) {
 			throw new RuntimeException(e);
 		}
+
+		Gears.drawable = pbuffer;
 
 		final ContextCapabilities caps = GLContext.getCapabilities();
 
@@ -107,8 +120,11 @@ final class Gears {
 		else if ( caps.GL_AMD_debug_output )
 			glDebugMessageCallbackAMD(new AMDDebugOutputCallback());
 
-		streamPBOReader = new StreamPBOReader(readHandler, 1, transfersToBuffer);
-		streamPBOWriter = new StreamPBOWriter(writeHandler, transfersToBuffer);
+		this.renderStreamFactory = StreamUtil.getRenderStreamImplementation();
+		this.renderStream = renderStreamFactory.create(readHandler, 1, transfersToBuffer);
+
+		this.textureStreamFactory = StreamUtil.getTextureStreamImplementation();
+		this.textureStream = textureStreamFactory.create(writeHandler, transfersToBuffer);
 
 		this.snapshotRequest = new AtomicLong();
 		this.snapshotCurrent = -1L;
@@ -116,6 +132,42 @@ final class Gears {
 
 	public int getMaxSamples() {
 		return maxSamples;
+	}
+
+	public RenderStreamFactory getRenderStreamFactory() {
+		return renderStreamFactory;
+	}
+
+	public void setRenderStreamFactory(final RenderStreamFactory renderStreamFactory) {
+		pendingRunnables.offer(new Runnable() {
+			public void run() {
+				if ( renderStream != null )
+					renderStream.destroy();
+
+				Gears.this.renderStreamFactory = renderStreamFactory;
+
+				renderStream = renderStreamFactory.create(renderStream.getHandler(), samples, transfersToBuffer);
+			}
+		});
+	}
+
+	public TextureStreamFactory getTextureStreamFactory() {
+		return textureStreamFactory;
+	}
+
+	public void setTextureStreamFactory(final TextureStreamFactory textureStreamFactory) {
+		pendingRunnables.offer(new Runnable() {
+			public void run() {
+				if ( textureStream != null )
+					textureStream.destroy();
+
+				Gears.this.textureStreamFactory = textureStreamFactory;
+
+				textureStream = textureStreamFactory.create(textureStream.getHandler(), transfersToBuffer);
+				updateSnapshot();
+			}
+		});
+
 	}
 
 	private void init() {
@@ -180,8 +232,8 @@ final class Gears {
 	}
 
 	private void destroy() {
-		streamPBOReader.destroy();
-		streamPBOWriter.destroy();
+		renderStream.destroy();
+		textureStream.destroy();
 		pbuffer.destroy();
 	}
 
@@ -202,7 +254,7 @@ final class Gears {
 			return;
 
 		this.transfersToBuffer = transfersToBuffer;
-		resetStreams = true;
+		resetStreams();
 	}
 
 	public void setSamples(final int samples) {
@@ -210,7 +262,28 @@ final class Gears {
 			return;
 
 		this.samples = samples;
-		resetStreams = true;
+		resetStreams();
+	}
+
+	private void resetStreams() {
+		pendingRunnables.offer(new Runnable() {
+			public void run() {
+				textureStream.destroy();
+				renderStream.destroy();
+
+				renderStream = renderStreamFactory.create(renderStream.getHandler(), samples, transfersToBuffer);
+				textureStream = textureStreamFactory.create(textureStream.getHandler(), transfersToBuffer);
+
+				updateSnapshot();
+			}
+		});
+	}
+
+	private void drainPendingActionsQueue() {
+		Runnable runnable;
+
+		while ( (runnable = pendingRunnables.poll()) != null )
+			runnable.run();
 	}
 
 	private void loop(final CountDownLatch running) {
@@ -225,25 +298,16 @@ final class Gears {
 		while ( 0 < running.getCount() ) {
 			angle += 0.1f * timeDelta; // 0.1 degrees per ms == 100 degrees per second
 
-			if ( resetStreams ) {
-				resetStreams = false;
-
-				streamPBOWriter.destroy();
-				streamPBOReader.destroy();
-
-				streamPBOReader = new StreamPBOReader(streamPBOReader.getHandler(), samples, transfersToBuffer);
-				streamPBOWriter = new StreamPBOWriter(streamPBOWriter.getHandler(), transfersToBuffer);
-
-				updateSnapshot();
-			}
+			drainPendingActionsQueue();
 
 			final long snapshotRequestID = snapshotRequest.get();
 			if ( snapshotCurrent < snapshotRequestID ) {
-				streamPBOWriter.nextFrame();
+				textureStream.snapshot();
 				snapshotCurrent = snapshotRequestID;
 			}
+			textureStream.tick();
 
-			streamPBOReader.bind();
+			renderStream.bind();
 
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -255,31 +319,41 @@ final class Gears {
 			glDisable(GL_LIGHTING);
 			glEnable(GL_TEXTURE_2D);
 
-			streamPBOWriter.bind();
-			drawQuad(streamPBOWriter.getWidth(), streamPBOWriter.getHeight());
+			textureStream.bind();
+			drawQuad(textureStream.getWidth(), textureStream.getHeight());
+			glBindTexture(GL_TEXTURE_2D, 0);
 
 			glDisable(GL_TEXTURE_2D);
 			glEnable(GL_LIGHTING);
 
-			glPushMatrix();
-			glTranslatef(-3.0f, -2.0f, 0.0f);
-			glRotatef(angle, 0.0f, 0.0f, 1.0f);
-			glCallList(gear1);
+			//for ( int i = -4; i < 4; i++ )
+			int i = 0;
+			{
+				glPushMatrix();
+				glTranslatef(-3.0f, -2.0f, i);
+				glRotatef(angle, 0.0f, 0.0f, 1.0f);
+				glCallList(gear1);
+				glPopMatrix();
+
+				glPushMatrix();
+				glTranslatef(3.1f, -2.0f, i);
+				glRotatef(-2.0f * angle - 9.0f, 0.0f, 0.0f, 1.0f);
+				glCallList(gear2);
+				glPopMatrix();
+
+				glPushMatrix();
+				glTranslatef(-3.1f, 4.2f, i);
+				glRotatef(-2.0f * angle - 25.0f, 0.0f, 0.0f, 1.0f);
+				glCallList(gear3);
+				glPopMatrix();
+			}
+
 			glPopMatrix();
 
-			glPushMatrix();
-			glTranslatef(3.1f, -2.0f, 0.0f);
-			glRotatef(-2.0f * angle - 9.0f, 0.0f, 0.0f, 1.0f);
-			glCallList(gear2);
-			glPopMatrix();
+			renderStream.swapBuffers();
 
-			glPushMatrix();
-			glTranslatef(-3.1f, 4.2f, 0.0f);
-			glRotatef(-2.0f * angle - 25.0f, 0.0f, 0.0f, 1.0f);
-			glCallList(gear3);
-			glPopMatrix();
-
-			glPopMatrix();
+			if ( vsync )
+				Display.sync(60);
 
 			final long currentTime = System.nanoTime();
 			timeDelta = (currentTime - lastTime) / 1000000.0;
@@ -287,7 +361,7 @@ final class Gears {
 
 			frames++;
 			if ( nextFPSUpdateTime <= currentTime ) {
-				long timeUsed = FPS_UPD_INTERVAL - (currentTime - nextFPSUpdateTime);
+				long timeUsed = FPS_UPD_INTERVAL + (currentTime - nextFPSUpdateTime);
 				nextFPSUpdateTime = currentTime + FPS_UPD_INTERVAL;
 
 				final int fpsAverage = (int)(frames * (1000L * 1000L * 1000L) / (timeUsed));
@@ -298,11 +372,6 @@ final class Gears {
 				});
 				frames = 0;
 			}
-
-			streamPBOReader.nextFrame();
-
-			if ( vsync )
-				Display.sync(60);
 		}
 	}
 

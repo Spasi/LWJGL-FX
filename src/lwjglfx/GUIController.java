@@ -1,4 +1,4 @@
-/*
+package lwjglfx;/*
  * Copyright (c) 2002-2012 LWJGL Project
  * All rights reserved.
  *
@@ -29,10 +29,15 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package lwjglfx;
+
+import org.lwjgl.util.stream.StreamHandler;
+import org.lwjgl.util.stream.StreamUtil;
+import org.lwjgl.util.stream.StreamUtil.RenderStreamFactory;
+import org.lwjgl.util.stream.StreamUtil.TextureStreamFactory;
 
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -67,20 +72,26 @@ import javafx.util.Duration;
 import static java.lang.Math.*;
 import static javafx.beans.binding.Bindings.*;
 import static javafx.collections.FXCollections.*;
-import static lwjglfx.StreamPBOReader.*;
-import static lwjglfx.StreamPBOWriter.*;
+import static org.lwjgl.opengl.GL11.*;
 
 /** The JavaFX application GUI controller. */
 public class GUIController implements Initializable {
 
 	@FXML private AnchorPane gearsRoot;
 	@FXML private ImageView  gearsView;
-	@FXML private Label      fpsLabel;
+
+	@FXML private Label fpsLabel;
+	@FXML private Label javaInfoLabel;
+	@FXML private Label systemInfoLabel;
+	@FXML private Label glInfoLabel;
 
 	@FXML private CheckBox vsync;
-	@FXML private ChoiceBox<BufferingChoice>
-	                       bufferingChoice;
-	@FXML private Slider   msaaSamples;
+
+	@FXML private ChoiceBox<RenderStreamFactory>  renderChoice;
+	@FXML private ChoiceBox<TextureStreamFactory> textureChoice;
+	@FXML private ChoiceBox<BufferingChoice>      bufferingChoice;
+
+	@FXML private Slider msaaSamples;
 
 	@FXML private WebView webView;
 
@@ -96,11 +107,29 @@ public class GUIController implements Initializable {
 		gearsView.fitWidthProperty().bind(gearsRoot.widthProperty());
 		gearsView.fitHeightProperty().bind(gearsRoot.heightProperty());
 
+		final StringBuilder info = new StringBuilder(128);
+		info
+			.append(System.getProperty("java.vm.name"))
+			.append(' ')
+			.append(System.getProperty("java.version"))
+			.append(' ')
+			.append(System.getProperty("java.vm.version"));
+
+		javaInfoLabel.setText(info.toString());
+
+		info.setLength(0);
+		info
+			.append(System.getProperty("os.name"))
+			.append(" - JavaFX ")
+			.append(System.getProperty("javafx.runtime.version"));
+
+		systemInfoLabel.setText(info.toString());
+
 		bufferingChoice.setItems(observableArrayList(BufferingChoice.values()));
 	}
 
-	private ReadHandler getReadHandler() {
-		return new ReadHandler() {
+	private StreamHandler getReadHandler() {
+		return new StreamHandler() {
 
 			public int getWidth() {
 				return (int)gearsView.getFitWidth();
@@ -110,8 +139,9 @@ public class GUIController implements Initializable {
 				return (int)gearsView.getFitHeight();
 			}
 
-			public void process(final int width, final int height, final ByteBuffer data, final Semaphore signal) {
+			public void process(final int width, final int height, final ByteBuffer data, final int stride, final Semaphore signal) {
 				// This method runs in the background rendering thread
+				// TODO: Run setPixels on the PlatformImage in this thread, run pixelsDirty on JFX application thread with runLater.
 				Platform.runLater(new Runnable() {
 					public void run() {
 						try {
@@ -126,7 +156,7 @@ public class GUIController implements Initializable {
 							}
 
 							// Upload the image to JavaFX
-							renderImage.getPixelWriter().setPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), data, width * 4);
+							renderImage.getPixelWriter().setPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), data, stride);
 						} finally {
 							// Notify the render thread that we're done processing
 							signal.release();
@@ -137,8 +167,8 @@ public class GUIController implements Initializable {
 		};
 	}
 
-	private WriteHandler getWriteHandler() {
-		return new WriteHandler() {
+	private StreamHandler getWriteHandler() {
+		return new StreamHandler() {
 			public int getWidth() {
 				return (int)webView.getWidth();
 			}
@@ -147,7 +177,7 @@ public class GUIController implements Initializable {
 				return (int)webView.getHeight();
 			}
 
-			public void process(final int width, final int height, final ByteBuffer buffer, final Semaphore signal) {
+			public void process(final int width, final int height, final ByteBuffer buffer, final int stride, final Semaphore signal) {
 				// This method runs in the background rendering thread
 				Platform.runLater(new Runnable() {
 					public void run() {
@@ -156,7 +186,8 @@ public class GUIController implements Initializable {
 
 						webView.snapshot(new Callback<SnapshotResult, Void>() {
 							public Void call(final SnapshotResult snapshotResult) {
-								snapshotResult.getImage().getPixelReader().getPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), buffer, width * 4);
+								snapshotResult.getImage().getPixelReader().getPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), buffer, stride);
+
 								signal.release();
 								return null;
 
@@ -180,6 +211,12 @@ public class GUIController implements Initializable {
 			return;
 		}
 
+		final List<RenderStreamFactory> renderStreamFactories = StreamUtil.getRenderStreamImplementations();
+		final List<TextureStreamFactory> textureStreamFactories = StreamUtil.getTextureStreamImplementations();
+
+		final String vendor = glGetString(GL_VENDOR);
+		final String version = glGetString(GL_VERSION);
+
 		Platform.runLater(new Runnable() {
 			public void run() {
 				// Listen for FPS changes and update the fps label
@@ -190,18 +227,44 @@ public class GUIController implements Initializable {
 						return "FPS: " + fps.get();
 					}
 				}, fps));
+				glInfoLabel.setText(vendor + " OpenGL " + version);
+
+				renderChoice.setItems(observableList(renderStreamFactories));
+				for ( int i = 0; i < renderStreamFactories.size(); i++ ) {
+					if ( renderStreamFactories.get(i) == gears.getRenderStreamFactory() ) {
+						renderChoice.getSelectionModel().select(i);
+						break;
+					}
+				}
+				renderChoice.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<RenderStreamFactory>() {
+					public void changed(final ObservableValue<? extends RenderStreamFactory> observableValue, final RenderStreamFactory oldValue, final RenderStreamFactory newValue) {
+						gears.setRenderStreamFactory(newValue);
+					}
+				});
+
+				textureChoice.setItems(observableList(textureStreamFactories));
+				for ( int i = 0; i < textureStreamFactories.size(); i++ ) {
+					if ( textureStreamFactories.get(i) == gears.getTextureStreamFactory() ) {
+						textureChoice.getSelectionModel().select(i);
+						break;
+					}
+				}
+				textureChoice.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<TextureStreamFactory>() {
+					public void changed(final ObservableValue<? extends TextureStreamFactory> observableValue, final TextureStreamFactory oldValue, final TextureStreamFactory newValue) {
+						gears.setTextureStreamFactory(newValue);
+					}
+				});
 
 				bufferingChoice.getSelectionModel().select(gears.getTransfersToBuffer() - 1);
+				bufferingChoice.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<BufferingChoice>() {
+					public void changed(final ObservableValue<? extends BufferingChoice> observableValue, final BufferingChoice oldValue, final BufferingChoice newValue) {
+						gears.setTransfersToBuffer(newValue.getTransfersToBuffer());
+					}
+				});
 
 				vsync.selectedProperty().addListener(new ChangeListener<Boolean>() {
 					public void changed(final ObservableValue<? extends Boolean> observableValue, final Boolean oldValue, final Boolean newValue) {
 						gears.setVsync(newValue);
-					}
-				});
-
-				bufferingChoice.getSelectionModel().selectedItemProperty().addListener(new ChangeListener<BufferingChoice>() {
-					public void changed(final ObservableValue<? extends BufferingChoice> observableValue, final BufferingChoice oldValue, final BufferingChoice newValue) {
-						gears.setTransfersToBuffer(newValue.getTransfersToBuffer());
 					}
 				});
 

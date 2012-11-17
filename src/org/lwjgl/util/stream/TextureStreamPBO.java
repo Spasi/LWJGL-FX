@@ -106,11 +106,8 @@ abstract class TextureStreamPBO extends StreamBufferedPBO implements TextureStre
 
 		// Back-pressure. Make sure we never buffer more than <transfersToBuffer> frames ahead.
 
-		if ( processingState.get(trgPBO) ) {
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[trgPBO]);
-			waitForProcessingToComplete(trgPBO);
-			upload(trgPBO);
-		}
+		if ( processingState.get(trgPBO) )
+			syncUpload(trgPBO);
 
 		pinBuffer(trgPBO);
 
@@ -127,6 +124,9 @@ abstract class TextureStreamPBO extends StreamBufferedPBO implements TextureStre
 		);
 
 		bufferIndex++;
+
+		if ( resetTexture ) // Synchronize to show the first frame immediately
+			syncUpload(trgPBO);
 	}
 
 	protected abstract void pinBuffer(final int index);
@@ -136,24 +136,33 @@ abstract class TextureStreamPBO extends StreamBufferedPBO implements TextureStre
 		if ( !processingState.get(srcPBO) )
 			return;
 
-		if ( resetTexture ) { // Synchronize to show the first frame immediately
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
-			waitForProcessingToComplete(srcPBO);
+		// Try again next frame
+		/*if ( !semaphores[srcPBO].tryAcquire() )
+			return;*/
 
-			upload(srcPBO);
+		/*semaphores[srcPBO].acquireUninterruptibly();
 
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-		} else if ( semaphores[srcPBO].tryAcquire() ) { // Non-blocking
-			semaphores[srcPBO].release(); // Give it back
+		semaphores[srcPBO].release(); // Give it back
 
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
-			postProcess(srcPBO);
-			processingState.set(srcPBO, false);
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
 
-			upload(srcPBO);
+		postProcess(srcPBO);
+		processingState.set(srcPBO, false);
 
-			glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-		} // Give-up, try again next frame
+		upload(srcPBO);
+
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);*/
+
+		syncUpload(srcPBO);
+	}
+
+	private void syncUpload(final int index) {
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[index]);
+		waitForProcessingToComplete(index);
+
+		upload(index);
+
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 	}
 
 	private void upload(final int srcPBO) {

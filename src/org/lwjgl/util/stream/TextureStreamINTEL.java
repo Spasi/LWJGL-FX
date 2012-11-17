@@ -34,7 +34,6 @@ package org.lwjgl.util.stream;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GLContext;
-import org.lwjgl.opengl.Util;
 import org.lwjgl.util.stream.StreamUtil.TextureStreamFactory;
 
 import java.nio.ByteBuffer;
@@ -142,8 +141,6 @@ final class TextureStreamINTEL extends StreamBuffered implements TextureStream {
 			buffers[i] = genLayoutLinearTexture(width, height);
 
 		glBindTexture(GL_TEXTURE_2D, 0);
-
-		Util.checkGLError();
 	}
 
 	private static int genLayoutLinearTexture(final int width, final int height) {
@@ -169,10 +166,8 @@ final class TextureStreamINTEL extends StreamBuffered implements TextureStream {
 
 		// Back-pressure. Make sure we never buffer more than <transfersToBuffer> frames ahead.
 
-		if ( processingState.get(trgPBO) ) {
-			waitForProcessingToComplete(trgPBO);
-			copyTexture(trgPBO);
-		}
+		if ( processingState.get(trgPBO) )
+			syncCopy(trgPBO);
 
 		pinnedBuffers[trgPBO] = glMapTexture2DINTEL(buffers[trgPBO], 0, height * stride, GL_MAP_WRITE_BIT, strideBuffer, layoutBuffer, pinnedBuffers[trgPBO]);
 
@@ -189,30 +184,33 @@ final class TextureStreamINTEL extends StreamBuffered implements TextureStream {
 		);
 
 		bufferIndex++;
+
+		if ( resetTexture ) {
+			syncCopy(trgPBO);
+			resetTexture = true;
+		}
 	}
 
 	public void tick() {
-		// Upload next frame if available
 		final int srcPBO = (int)(currentIndex % transfersToBuffer);
 		if ( !processingState.get(srcPBO) )
 			return;
 
-		if ( resetTexture ) { // Synchronize to show the first frame immediately
-			waitForProcessingToComplete(srcPBO);
-			copyTexture(srcPBO);
-			resetTexture = false;
-		} else if ( semaphores[srcPBO].tryAcquire() ) { // Non-blocking
-			semaphores[srcPBO].release(); // Give it back
+		// Try again next frame
+		if ( !semaphores[srcPBO].tryAcquire() )
+			return;
 
-			postProcess(srcPBO);
-			processingState.set(srcPBO, false);
+		semaphores[srcPBO].release(); // Give it back
 
-			copyTexture(srcPBO);
-		} // Give-up, try again next frame
+		postProcess(srcPBO);
+		processingState.set(srcPBO, false);
+
+		copyTexture(srcPBO);
 	}
 
-	public void bind() {
-		glBindTexture(GL_TEXTURE_2D, texID);
+	private void syncCopy(final int index) {
+		waitForProcessingToComplete(index);
+		copyTexture(index);
 	}
 
 	private void copyTexture(final int index) {
@@ -231,6 +229,10 @@ final class TextureStreamINTEL extends StreamBuffered implements TextureStream {
 
 	protected void postProcess(final int index) {
 		glUnmapTexture2DINTEL(buffers[index], 0);
+	}
+
+	public void bind() {
+		glBindTexture(GL_TEXTURE_2D, texID);
 	}
 
 	private void destroyObjects() {

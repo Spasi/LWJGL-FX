@@ -37,6 +37,7 @@ import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GLSync;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import static org.lwjgl.opengl.AMDPinnedMemory.*;
 import static org.lwjgl.opengl.GL15.*;
@@ -75,12 +76,13 @@ public class TextureStreamPBOAMD extends TextureStreamPBO {
 			// Pre-allocate page-aligned pinned buffers
 			final int PAGE_SIZE = PageSizeProvider.PAGE_SIZE;
 
-			final ByteBuffer buffer = pinnedBuffers[i] = BufferUtils.createByteBuffer(renderBytes + PAGE_SIZE);
+			final ByteBuffer buffer = BufferUtils.createByteBuffer(renderBytes + PAGE_SIZE);
 			final int pageOffset = (int)(MemoryUtil.getAddress(buffer) % PAGE_SIZE);
 			buffer.position(PAGE_SIZE - pageOffset); // Aligns to page
 			buffer.limit(buffer.capacity() - pageOffset); // Caps remaining() to renderBytes
 
-			glBufferData(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, buffer, GL_STREAM_DRAW);
+			pinnedBuffers[i] = buffer.slice().order(ByteOrder.nativeOrder());
+			glBufferData(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, pinnedBuffers[i], GL_STREAM_DRAW);
 		}
 
 		glBindBuffer(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, 0);

@@ -39,6 +39,7 @@ import org.lwjgl.util.stream.StreamUtil.PageSizeProvider;
 import org.lwjgl.util.stream.StreamUtil.RenderStreamFactory;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import static org.lwjgl.opengl.AMDPinnedMemory.*;
 import static org.lwjgl.opengl.GL15.*;
@@ -76,12 +77,13 @@ final class RenderStreamPBOAMD extends RenderStreamPBO {
 			// Pre-allocate page-aligned pinned buffers
 			final int PAGE_SIZE = PageSizeProvider.PAGE_SIZE;
 
-			final ByteBuffer buffer = pinnedBuffers[i] = BufferUtils.createByteBuffer(renderBytes + PAGE_SIZE);
+			final ByteBuffer buffer = BufferUtils.createByteBuffer(renderBytes + PAGE_SIZE);
 			final int pageOffset = (int)(MemoryUtil.getAddress(buffer) % PAGE_SIZE);
 			buffer.position(PAGE_SIZE - pageOffset); // Aligns to page
 			buffer.limit(buffer.capacity() - pageOffset); // Caps remaining() to renderBytes
 
-			glBufferData(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, buffer, GL_STREAM_READ);
+			pinnedBuffers[i] = buffer.slice().order(ByteOrder.nativeOrder());
+			glBufferData(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, pinnedBuffers[i], GL_STREAM_READ);
 		}
 
 		glBindBuffer(GL_EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD, 0);
@@ -105,13 +107,10 @@ final class RenderStreamPBOAMD extends RenderStreamPBO {
 		final ByteBuffer srcBuffer = pinnedBuffers[src];
 		final ByteBuffer trgBuffer = pinnedBuffers[trg];
 
-		final int srcPos = srcBuffer.position();
-		final int trgPos = trgBuffer.position();
-
 		trgBuffer.put(srcBuffer);
 
-		srcBuffer.position(srcPos);
-		trgBuffer.position(trgPos);
+		trgBuffer.flip();
+		srcBuffer.flip();
 	}
 
 	protected void postProcess(final int index) {

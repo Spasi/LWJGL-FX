@@ -48,14 +48,20 @@ final class RenderStreamPBODefault extends RenderStreamPBO {
 		}
 
 		public RenderStream create(final StreamHandler handler, final int samples, final int transfersToBuffer) {
-			return new RenderStreamPBODefault(handler, samples, transfersToBuffer);
+			final ContextCapabilities caps = GLContext.getCapabilities();
+
+			return new RenderStreamPBODefault(
+				handler, samples, transfersToBuffer,
+				// Detect NVIDIA and use GetTexImage instead of ReadPixels
+				StreamUtil.isNVIDIA(caps) ? ReadbackType.GET_TEX_IMAGE : ReadbackType.READ_PIXELS
+			);
 		}
 	};
 
 	private final boolean USE_COPY_BUFFER_SUB_DATA;
 
-	RenderStreamPBODefault(final StreamHandler handler, final int samples, final int transfersToBuffer) {
-		super(handler, samples, transfersToBuffer);
+	RenderStreamPBODefault(final StreamHandler handler, final int samples, final int transfersToBuffer, final ReadbackType readbackType) {
+		super(handler, samples, transfersToBuffer, readbackType);
 
 		final ContextCapabilities caps = GLContext.getCapabilities();
 

@@ -6,6 +6,7 @@ import org.lwjgl.opengl.GLSync;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,7 +15,9 @@ import sun.misc.Unsafe;
 import static org.lwjgl.opengl.EXTFramebufferBlit.*;
 import static org.lwjgl.opengl.EXTFramebufferMultisample.*;
 import static org.lwjgl.opengl.EXTFramebufferObject.*;
+import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.glGetInteger;
+import static org.lwjgl.opengl.GL12.*;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.GL32.*;
 
@@ -24,6 +27,35 @@ public final class StreamUtil {
 	private static final int TEX_ROW_ALIGNMENT = 16 * 4; // 16 pixels
 
 	private StreamUtil() {
+	}
+
+	static int createRenderTexture(final int width, final int height) {
+		final int texID = glGenTextures();
+
+		glBindTexture(GL_TEXTURE_2D, texID);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, (ByteBuffer)null);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		return texID;
+	}
+
+	static int createRenderBuffer(final FBOUtil fboUtil, final int width, final int height, final int internalformat) {
+		return createRenderBuffer(fboUtil, width, height, 1, internalformat);
+	}
+
+	static int createRenderBuffer(final FBOUtil fboUtil, final int width, final int height, final int samples, final int internalformat) {
+		final int bufferID = fboUtil.genRenderbuffers();
+
+		fboUtil.bindRenderbuffer(GL_RENDERBUFFER, bufferID);
+		if ( samples <= 1 )
+			fboUtil.renderbufferStorage(GL_RENDERBUFFER, internalformat, width, height);
+		else
+			fboUtil.renderbufferStorageMultisample(GL_RENDERBUFFER, samples, internalformat, width, height);
+		fboUtil.bindRenderbuffer(GL_RENDERBUFFER, 0);
+
+		return bufferID;
 	}
 
 	static void waitOnFence(final GLSync[] fences, final int index) {
@@ -41,6 +73,10 @@ public final class StreamUtil {
 
 	static boolean isAMD(final ContextCapabilities caps) {
 		return caps.GL_ATI_fragment_shader || caps.GL_ATI_texture_compression_3dc || caps.GL_AMD_debug_output;
+	}
+
+	static boolean isNVIDIA(final ContextCapabilities caps) {
+		return caps.GL_NV_vertex_program || caps.GL_NV_register_combiners || caps.GL_NV_gpu_program4;
 	}
 
 	static int getStride(final int width) {
@@ -96,9 +132,9 @@ public final class StreamUtil {
 		final List<RenderStreamFactory> list = new ArrayList<RenderStreamFactory>();
 
 		addIfSupported(caps, list, RenderStreamPBOAMD.FACTORY);
+		addIfSupported(caps, list, RenderStreamPBOCopy.FACTORY);
 		addIfSupported(caps, list, RenderStreamINTEL.FACTORY);
 		addIfSupported(caps, list, RenderStreamPBODefault.FACTORY);
-		addIfSupported(caps, list, RenderStreamPBOCopy.FACTORY);
 
 		return list;
 	}

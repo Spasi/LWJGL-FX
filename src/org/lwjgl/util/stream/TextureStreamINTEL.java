@@ -125,13 +125,7 @@ final class TextureStreamINTEL extends StreamBuffered implements TextureStream {
 
 		resetTexture = true;
 
-		texID = glGenTextures();
-
-		glBindTexture(GL_TEXTURE_2D, texID);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, (ByteBuffer)null);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		texID = StreamUtil.createRenderTexture(width, height);
 
 		fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, texFBO);
 		fboUtil.framebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texID, 0);

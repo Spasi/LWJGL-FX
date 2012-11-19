@@ -43,18 +43,22 @@ final class RenderStreamPBOCopy extends RenderStreamPBO {
 
 	public static final RenderStreamFactory FACTORY = new RenderStreamFactory("ARB_copy_buffer") {
 		public boolean isSupported(final ContextCapabilities caps) {
-			return RenderStreamPBODefault.FACTORY.isSupported(caps) && caps.GL_ARB_copy_buffer;
+			return RenderStreamPBODefault.FACTORY.isSupported(caps)
+			       && caps.GL_ARB_copy_buffer
+			       && caps.GL_NV_gpu_program5 // Nvidia only
+			       && (caps.OpenGL40 || caps.GL_ARB_tessellation_shader) // Fermi+
+				;
 		}
 
 		public RenderStream create(final StreamHandler handler, final int samples, final int transfersToBuffer) {
-			return new RenderStreamPBOCopy(handler, samples, transfersToBuffer);
+			return new RenderStreamPBOCopy(handler, samples, transfersToBuffer, ReadbackType.GET_TEX_IMAGE);
 		}
 	};
 
 	private int devicePBO;
 
-	RenderStreamPBOCopy(final StreamHandler handler, final int samples, final int transfersToBuffer) {
-		super(handler, samples, transfersToBuffer);
+	RenderStreamPBOCopy(final StreamHandler handler, final int samples, final int transfersToBuffer, final ReadbackType readbackType) {
+		super(handler, samples, transfersToBuffer, readbackType);
 	}
 
 	protected void resizeBuffers(final int height, final int stride) {

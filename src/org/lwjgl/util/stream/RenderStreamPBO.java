@@ -31,6 +31,7 @@
  */
 package org.lwjgl.util.stream;
 
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GLContext;
 
@@ -42,6 +43,15 @@ import static org.lwjgl.opengl.GL30.*;
 
 /** Implements streaming PBO updates from a framebuffer object. */
 abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream {
+
+	public static enum ReadbackType {
+		/** RenderBuffers on FBO, ReadPixels to readback. */
+		READ_PIXELS,
+		/** Textures on FBO, GetTexImage to readback. */
+		GET_TEX_IMAGE
+	}
+
+	private final ReadbackType readbackType;
 
 	protected final StreamUtil.FBOUtil fboUtil;
 	private final   int                renderFBO;
@@ -56,8 +66,10 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 
 	protected int synchronousFrames;
 
-	protected RenderStreamPBO(final StreamHandler handler, final int samples, final int transfersToBuffer) {
+	protected RenderStreamPBO(final StreamHandler handler, final int samples, final int transfersToBuffer, final ReadbackType readbackType) {
 		super(handler, transfersToBuffer);
+
+		this.readbackType = readbackType;
 
 		final ContextCapabilities caps = GLContext.getCapabilities();
 
@@ -91,21 +103,21 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 
 		fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, renderFBO);
 
-		rgbaBuffer = fboUtil.genRenderbuffers();
-		fboUtil.bindRenderbuffer(GL_RENDERBUFFER, rgbaBuffer);
-		if ( samples <= 1 )
-			fboUtil.renderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+		if ( samples <= 1 && readbackType == ReadbackType.GET_TEX_IMAGE )
+			fboUtil.framebufferTexture2D(
+				GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+				rgbaBuffer = StreamUtil.createRenderTexture(width, height), 0
+			);
 		else
-			fboUtil.renderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_RGBA8, width, height);
-		fboUtil.framebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rgbaBuffer);
+			fboUtil.framebufferRenderbuffer(
+				GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+				rgbaBuffer = StreamUtil.createRenderBuffer(fboUtil, width, height, samples, GL_RGBA8)
+			);
 
-		depthBuffer = fboUtil.genRenderbuffers();
-		fboUtil.bindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
-		if ( samples <= 1 )
-			fboUtil.renderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-		else
-			fboUtil.renderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
-		fboUtil.framebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
+		fboUtil.framebufferRenderbuffer(
+			GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+			depthBuffer = StreamUtil.createRenderBuffer(fboUtil, width, height, samples, GL_DEPTH24_STENCIL8)
+		);
 
 		glViewport(0, 0, width, height);
 
@@ -118,14 +130,23 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 
 			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, msaaResolveFBO);
 
-			msaaResolveBuffer = fboUtil.genRenderbuffers();
-			fboUtil.bindRenderbuffer(GL_RENDERBUFFER, msaaResolveBuffer);
-			fboUtil.renderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
-			fboUtil.framebufferRenderbuffer(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msaaResolveBuffer);
+			if ( readbackType == ReadbackType.READ_PIXELS )
+				fboUtil.framebufferRenderbuffer(
+					GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+					msaaResolveBuffer = StreamUtil.createRenderBuffer(fboUtil, width, height, GL_RGBA8)
+				);
+			else
+				fboUtil.framebufferTexture2D(
+					GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+					msaaResolveBuffer = StreamUtil.createRenderTexture(width, height), 0
+				);
 
 			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 		} else if ( msaaResolveFBO != 0 ) {
-			fboUtil.deleteRenderbuffers(msaaResolveBuffer);
+			if ( readbackType == ReadbackType.READ_PIXELS )
+				fboUtil.deleteRenderbuffers(msaaResolveBuffer);
+			else
+				glDeleteTextures(msaaResolveBuffer);
 			msaaResolveBuffer = 0;
 
 			fboUtil.deleteFramebuffers(msaaResolveFBO);
@@ -149,16 +170,15 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 	}
 
 	protected void prepareFramebuffer() {
-		if ( msaaResolveFBO == 0 ) {
+		if ( msaaResolveFBO == 0 )
 			fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, renderFBO);
-		} else {
+		else {
 			// Resolve MSAA
 			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, renderFBO);
 			fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, msaaResolveFBO);
 			fboUtil.blitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 			fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, msaaResolveFBO);
+			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 		}
 	}
 
@@ -178,8 +198,6 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 			waitForProcessingToComplete(trgPBO);
 
 		readBack(trgPBO);
-
-		fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
 		// This will be non-zero for the first (transfersToBuffer - 1) frames
 		// after start-up or a resize.
@@ -212,8 +230,18 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 	protected void readBack(final int index) {
 		// Stride in pixels
 		glPixelStorei(GL_PACK_ROW_LENGTH, stride >> 2);
+
 		// Asynchronously transfer current frame
-		glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+		if ( readbackType == ReadbackType.READ_PIXELS ) {
+			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, msaaResolveFBO == 0 ? renderFBO : msaaResolveFBO);
+			glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+			fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		} else {
+			glBindTexture(GL_TEXTURE_2D, msaaResolveFBO == 0 ? rgbaBuffer : msaaResolveBuffer);
+			glGetTexImage(GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		}
+
 		// Restore PACK_ROW_LENGTH
 		glPixelStorei(GL_PACK_ROW_LENGTH, 0);
 	}
@@ -237,9 +265,19 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 				glDeleteBuffers(pbos[i]);
 		}
 
-		if ( msaaResolveBuffer != 0 ) fboUtil.deleteRenderbuffers(msaaResolveBuffer);
+		if ( msaaResolveBuffer != 0 ) {
+			if ( readbackType == ReadbackType.READ_PIXELS )
+				fboUtil.deleteRenderbuffers(msaaResolveBuffer);
+			else
+				glDeleteTextures(msaaResolveBuffer);
+		}
 		if ( depthBuffer != 0 ) fboUtil.deleteRenderbuffers(depthBuffer);
-		if ( rgbaBuffer != 0 ) fboUtil.deleteRenderbuffers(rgbaBuffer);
+		if ( rgbaBuffer != 0 ) {
+			if ( samples <= 1 && readbackType == ReadbackType.GET_TEX_IMAGE )
+				glDeleteTextures(rgbaBuffer);
+			else
+				fboUtil.deleteRenderbuffers(rgbaBuffer);
+		}
 	}
 
 	public void destroy() {

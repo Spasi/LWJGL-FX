@@ -61,7 +61,7 @@ final class RenderStreamPBOAMD extends RenderStreamPBO {
 	private final GLSync[] fences;
 
 	RenderStreamPBOAMD(final StreamHandler handler, final int samples, final int transfersToBuffer) {
-		super(handler, samples, transfersToBuffer);
+		super(handler, samples, transfersToBuffer, ReadbackType.READ_PIXELS);
 
 		fences = new GLSync[this.transfersToBuffer];
 	}

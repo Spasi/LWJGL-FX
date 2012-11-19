@@ -122,20 +122,10 @@ final class RenderStreamINTEL extends StreamBuffered implements RenderStream {
 
 		fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, renderFBO);
 
-		rgbaBuffer = fboUtil.genRenderbuffers();
-		fboUtil.bindRenderbuffer(GL_RENDERBUFFER, rgbaBuffer);
-		if ( samples <= 1 )
-			fboUtil.renderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
-		else
-			fboUtil.renderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_RGBA8, width, height);
+		rgbaBuffer = StreamUtil.createRenderBuffer(fboUtil, width, height, samples, GL_RGBA8);
 		fboUtil.framebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rgbaBuffer);
 
-		depthBuffer = fboUtil.genRenderbuffers();
-		fboUtil.bindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
-		if ( samples <= 1 )
-			fboUtil.renderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-		else
-			fboUtil.renderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
+		depthBuffer = StreamUtil.createRenderBuffer(fboUtil, width, height, samples, GL_DEPTH24_STENCIL8);
 		fboUtil.framebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
 
 		glViewport(0, 0, width, height);

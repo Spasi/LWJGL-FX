@@ -136,23 +136,6 @@ abstract class TextureStreamPBO extends StreamBufferedPBO implements TextureStre
 		if ( !processingState.get(srcPBO) )
 			return;
 
-		// Try again next frame
-		/*if ( !semaphores[srcPBO].tryAcquire() )
-			return;*/
-
-		/*semaphores[srcPBO].acquireUninterruptibly();
-
-		semaphores[srcPBO].release(); // Give it back
-
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[srcPBO]);
-
-		postProcess(srcPBO);
-		processingState.set(srcPBO, false);
-
-		upload(srcPBO);
-
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);*/
-
 		syncUpload(srcPBO);
 	}
 

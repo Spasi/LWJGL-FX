@@ -153,7 +153,6 @@ public final class StreamUtil {
 		final List<TextureStreamFactory> list = new ArrayList<TextureStreamFactory>();
 
 		addIfSupported(caps, list, TextureStreamINTEL.FACTORY);
-		addIfSupported(caps, list, TextureStreamPBOAMD.FACTORY);
 		addIfSupported(caps, list, TextureStreamPBORange.FACTORY);
 		addIfSupported(caps, list, TextureStreamPBODefault.FACTORY);
 

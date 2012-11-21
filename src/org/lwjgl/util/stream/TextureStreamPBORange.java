@@ -74,6 +74,7 @@ public class TextureStreamPBORange extends TextureStreamPBO {
 			StreamUtil.waitOnFence(fences, index);
 
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos[index]);
+		glBufferData(GL_PIXEL_UNPACK_BUFFER, height * stride, GL_STREAM_DRAW); // Orphan previous buffer
 		pinnedBuffers[index] = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, height * stride, GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT, pinnedBuffers[index]);
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 	}

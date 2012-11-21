@@ -30,11 +30,15 @@ public final class StreamUtil {
 	}
 
 	static int createRenderTexture(final int width, final int height) {
+		return createRenderTexture(width, height, GL_NEAREST);
+	}
+
+	static int createRenderTexture(final int width, final int height, final int filter) {
 		final int texID = glGenTextures();
 
 		glBindTexture(GL_TEXTURE_2D, texID);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, (ByteBuffer)null);
 		glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -59,14 +63,7 @@ public final class StreamUtil {
 	}
 
 	static void waitOnFence(final GLSync[] fences, final int index) {
-		final ContextCapabilities caps = GLContext.getCapabilities();
-
-		// ClientWaitSync if borked on INTEL drivers, use WaitSync and hope for the best.
-		if ( caps.GL_INTEL_map_texture )
-			glWaitSync(fences[index], 0, GL_TIMEOUT_IGNORED);
-		else
-			glClientWaitSync(fences[index], 0, GL_TIMEOUT_IGNORED);
-
+		glWaitSync(fences[index], 0, GL_TIMEOUT_IGNORED);
 		glDeleteSync(fences[index]);
 		fences[index] = null;
 	}

@@ -1,4 +1,4 @@
-package lwjglfx;/*
+/*
  * Copyright (c) 2002-2012 LWJGL Project
  * All rights reserved.
  *
@@ -29,6 +29,7 @@ package lwjglfx;/*
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+package lwjglfx;
 
 import java.net.URL;
 import java.util.concurrent.CountDownLatch;

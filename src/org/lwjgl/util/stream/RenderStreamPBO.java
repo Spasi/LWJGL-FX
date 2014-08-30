@@ -31,7 +31,6 @@
  */
 package org.lwjgl.util.stream;
 
-import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GLContext;
 
@@ -186,42 +185,45 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 		if ( width == 0 || height == 0 )
 			return;
 
-		prepareFramebuffer();
+		final int renderToPBO = (int)(bufferIndex % transfersToBuffer);
+		final int readFromPBO = (int)((bufferIndex + 1) % transfersToBuffer); // Read from the oldest one we have rendered
 
-		final int trgPBO = (int)(bufferIndex % transfersToBuffer);
-		final int srcPBO = (int)((bufferIndex - 1) % transfersToBuffer);
-
-		glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[trgPBO]);
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[renderToPBO]);
 
 		// Back-pressure. Make sure we never buffer more than <transfersToBuffer> frames ahead.
-		if ( processingState.get(trgPBO) )
-			waitForProcessingToComplete(trgPBO);
+		if ( processingState.get(renderToPBO) )
+			waitForProcessingToComplete(renderToPBO);
 
-		readBack(trgPBO);
+		prepareFramebuffer();
+		readBack(renderToPBO);
+		// The glFlush is required because it forces the GL to start the readback as soon as possible. Without
+		// flushing, it may delay the readback until the next action that depends on the PBO. This would effectively
+		// make double-buffering almost as slow as single-buffering and triple-buffering as slow as double-buffering.
+		glFlush();
 
 		// This will be non-zero for the first (transfersToBuffer - 1) frames
 		// after start-up or a resize.
 		if ( 0 < synchronousFrames ) {
-			// The srcPBO is currently empty. Wait for trgPBO's ReadPixels to complete and copy the current frame to srcPBO.
+			// The readFromPBO is currently empty. Wait for renderToPBO's ReadPixels to complete and copy the current frame to readFromPBO.
 			// We do this to avoid sending an empty buffer for processing, which would cause a visible flicker on resize.
-			copyFrames(trgPBO, srcPBO);
+			copyFrames(renderToPBO, readFromPBO);
 			synchronousFrames--;
 		}
 
-		// Time to process the srcPBO
+		// Time to process the readFromPBO
 
-		pinBuffer(srcPBO);
+		pinBuffer(readFromPBO);
 
 		// Send the buffer for processing
 
-		processingState.set(srcPBO, true);
-		semaphores[srcPBO].acquireUninterruptibly();
+		processingState.set(readFromPBO, true);
+		semaphores[readFromPBO].acquireUninterruptibly();
 
 		handler.process(
 			width, height,
-			pinnedBuffers[srcPBO],
+			pinnedBuffers[readFromPBO],
 			stride,
-			semaphores[srcPBO]
+			semaphores[readFromPBO]
 		);
 
 		bufferIndex++;

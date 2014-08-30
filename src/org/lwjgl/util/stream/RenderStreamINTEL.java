@@ -45,7 +45,7 @@ import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.INTELMapTexture.*;
 
 /**
- * Optimized StreamPBOReader for Intel IGPs:
+ * Optimized RenderStream for Intel IGPs:
  * <p/>
  * - We render to a standard FBO.
  * - We asynchronously blit to another FBO with INTEL_map_texture attachments (linear layout).
@@ -168,6 +168,7 @@ final class RenderStreamINTEL extends StreamBuffered implements RenderStream {
 		// Blit current texture
 		fboUtil.framebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, resolveBuffers[trgTEX], 0);
 		fboUtil.blitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		glFlush();
 
 		fboUtil.bindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		fboUtil.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -177,34 +178,34 @@ final class RenderStreamINTEL extends StreamBuffered implements RenderStream {
 		if ( width == 0 || height == 0 )
 			return;
 
-		final int trgTEX = (int)(bufferIndex % transfersToBuffer);
-		final int srcTEX = (int)((bufferIndex - 1) % transfersToBuffer);
+		final int renderToTEX = (int)(bufferIndex % transfersToBuffer);
+		final int readFromTEX = (int)((bufferIndex + 1) % transfersToBuffer);
 
-		prepareFramebuffer(trgTEX);
+		prepareFramebuffer(renderToTEX);
 
 		// This will be non-zero for the first (transfersToBuffer - 1) frames
 		// after start-up or a resize.
 		if ( 0 < synchronousFrames ) {
-			// The srcTEX is currently empty. Wait for trgPBO's ReadPixels to complete and copy the current frame to srcTEX.
+			// The readFromTEX is currently empty. Wait for renderToTEX's ReadPixels to complete and copy the current frame to readFromTEX.
 			// We do this to avoid sending an empty buffer for processing, which would cause a visible flicker on resize.
-			copyFrames(trgTEX, srcTEX);
+			copyFrames(renderToTEX, readFromTEX);
 			synchronousFrames--;
 		}
 
-		// Time to process the srcTEX
+		// Time to process the readFromTEX
 
-		pinBuffer(srcTEX);
+		pinBuffer(readFromTEX);
 
 		// Send the buffer for processing
 
-		processingState.set(srcTEX, true);
-		semaphores[srcTEX].acquireUninterruptibly();
+		processingState.set(readFromTEX, true);
+		semaphores[readFromTEX].acquireUninterruptibly();
 
 		handler.process(
 			width, height,
-			pinnedBuffers[srcTEX],
+			pinnedBuffers[readFromTEX],
 			stride,
-			semaphores[srcTEX]
+			semaphores[readFromTEX]
 		);
 
 		bufferIndex++;

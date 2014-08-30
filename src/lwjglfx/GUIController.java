@@ -95,9 +95,6 @@ public class GUIController implements Initializable {
 
 	@FXML private WebView webView;
 
-	private WritableImage renderImage;
-	private WritableImage webImage;
-
 	private Gears gears;
 
 	public GUIController() {
@@ -130,6 +127,8 @@ public class GUIController implements Initializable {
 
 	private StreamHandler getReadHandler() {
 		return new StreamHandler() {
+
+			private WritableImage renderImage;
 
 			public int getWidth() {
 				return (int)gearsView.getFitWidth();
@@ -169,6 +168,9 @@ public class GUIController implements Initializable {
 
 	private StreamHandler getWriteHandler() {
 		return new StreamHandler() {
+
+			private WritableImage webImage;
+
 			public int getWidth() {
 				return (int)webView.getWidth();
 			}
@@ -304,8 +306,8 @@ public class GUIController implements Initializable {
 
 								msaaSamples.setValue(
 									value - prevPoT < nextPoT - value
-									? prevPoT
-									: nextPoT
+										? prevPoT
+										: nextPoT
 								);
 							}
 						}
@@ -363,7 +365,7 @@ public class GUIController implements Initializable {
 					}
 				});
 
-				webView.getEngine().load("http://www.javagaming.org");
+				webView.getEngine().load("http://www.java-gaming.org");
 			}
 		});
 

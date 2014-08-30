@@ -94,7 +94,7 @@ public final class StreamUtil {
 	}
 
 	static void waitOnFence(final GLSync[] fences, final int index) {
-		glWaitSync(fences[index], 0, GL_TIMEOUT_IGNORED);
+		glClientWaitSync(fences[index], 0, GL_TIMEOUT_IGNORED);
 		glDeleteSync(fences[index]);
 		fences[index] = null;
 	}

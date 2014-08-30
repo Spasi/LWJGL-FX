@@ -55,6 +55,7 @@ import static org.lwjgl.opengl.ARBDebugOutput.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.glGetInteger;
 import static org.lwjgl.opengl.GL30.*;
+import static org.lwjgl.opengl.KHRDebug.*;
 
 /** The LWJGL Gears test, modified to use the PBO reader & writer. */
 final class Gears {
@@ -86,7 +87,7 @@ final class Gears {
 
 	private boolean vsync = true;
 
-	private int transfersToBuffer = 3;
+	private int transfersToBuffer = 2;
 	private int samples           = 1;
 
 	private final AtomicLong snapshotRequest;
@@ -116,7 +117,9 @@ final class Gears {
 		else
 			maxSamples = 1;
 
-		if ( caps.GL_ARB_debug_output )
+		if ( caps.GL_KHR_debug )
+			glDebugMessageCallback(new KHRDebugCallback());
+		else if ( caps.GL_ARB_debug_output )
 			glDebugMessageCallbackARB(new ARBDebugOutputCallback());
 		else if ( caps.GL_AMD_debug_output )
 			glDebugMessageCallbackAMD(new AMDDebugOutputCallback());

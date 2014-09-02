@@ -136,7 +136,7 @@ abstract class RenderStreamPBO extends StreamBufferedPBO implements RenderStream
 				);
 			else
 				fboUtil.framebufferTexture2D(
-					GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+					GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
 					msaaResolveBuffer = StreamUtil.createRenderTexture(width, height), 0
 				);
 

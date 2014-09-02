@@ -52,6 +52,7 @@ import javafx.beans.value.ObservableValue;
 import javafx.event.*;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.Node;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.SnapshotResult;
 import javafx.scene.control.CheckBox;
@@ -68,8 +69,8 @@ import javafx.scene.web.WebEvent;
 import javafx.scene.web.WebView;
 import javafx.util.Callback;
 import javafx.util.Duration;
+import javafx.util.StringConverter;
 
-import static java.lang.Math.*;
 import static javafx.beans.binding.Bindings.*;
 import static javafx.collections.FXCollections.*;
 import static org.lwjgl.opengl.GL11.*;
@@ -123,6 +124,33 @@ public class GUIController implements Initializable {
 		systemInfoLabel.setText(info.toString());
 
 		bufferingChoice.setItems(observableArrayList(BufferingChoice.values()));
+
+		msaaSamples.setMin(0);
+		msaaSamples.setMax(0);
+		if ( System.getProperty("javafx.runtime.version").startsWith("2") )
+			// The label formatter was not working until JavaFX 8.
+			for ( Node n : msaaSamples.getParent().getChildrenUnmodifiable() ) {
+				if ( !(n instanceof Label) )
+					continue;
+
+				Label l = (Label)n;
+				if ( "MSAA Samples".equals(l.getText()) ) {
+					l.setText("MSAA Samples (2^x)");
+					break;
+				}
+			}
+		else
+			msaaSamples.setLabelFormatter(new StringConverter<Double>() {
+				@Override
+				public String toString(final Double object) {
+					return Integer.toString(1 << object.intValue());
+				}
+
+				@Override
+				public Double fromString(final String string) {
+					return null;
+				}
+			});
 	}
 
 	private StreamHandler getReadHandler() {
@@ -274,42 +302,10 @@ public class GUIController implements Initializable {
 				if ( maxSamples == 1 )
 					msaaSamples.setDisable(true);
 				else {
-					msaaSamples.setMax(maxSamples);
+					msaaSamples.setMax(Integer.numberOfTrailingZeros(maxSamples));
 					msaaSamples.valueProperty().addListener(new ChangeListener<Number>() {
-
-						public boolean isPoT(final int value) {
-							return value != 0 && (value & (value - 1)) == 0;
-						}
-
-						public int nextPoT(final int value) {
-							int v = value - 1;
-
-							v |= (v >>> 1);
-							v |= (v >>> 2);
-							v |= (v >>> 4);
-							v |= (v >>> 8);
-							v |= (v >>> 16);
-
-							return v + 1;
-						}
-
 						public void changed(final ObservableValue<? extends Number> observableValue, final Number oldValue, final Number newValue) {
-							final float value = newValue.floatValue();
-							final int samples = round(value);
-
-							if ( isPoT(samples) )
-								gears.setSamples(samples);
-							else {
-								// Snap to powers of two
-								final int nextPoT = nextPoT(samples);
-								final int prevPoT = nextPoT >> 1;
-
-								msaaSamples.setValue(
-									value - prevPoT < nextPoT - value
-										? prevPoT
-										: nextPoT
-								);
-							}
+							gears.setSamples(1 << newValue.intValue());
 						}
 					});
 				}

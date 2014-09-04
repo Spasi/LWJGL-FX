@@ -9,6 +9,15 @@ The same idea could be applied to windowing systems other than JavaFX. This is w
 
 ![Screenshot](http://cloud.github.com/downloads/Spasi/LWJGL-FX/lwjgl_javafx.jpg)
 
+## How to Build
+
+This demo requires JDK 7 or higher and [Apache Ant](http://ant.apache.org/) to build and run. Also:
+
+- Download an LWJGL distribution and extract it in the lib folder. Preferably the latest [nightly build](http://ci.newdawnsoftware.com/job/LWJGL-git-dist/lastBuild/).
+- Open build.xml and set the first two properties, _JDK_ and _LWJGL\_PATH_ to the appropriate values.
+
+Then type _ant_ or _ant run_.
+
 ## Implementation Notes
 
 - **IMPORTANT**: This is a proof-of-concept demo and is not meant to be used in production. The performance overhead is horrible and burns tons of unnecessary

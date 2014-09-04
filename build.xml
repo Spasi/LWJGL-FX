@@ -5,9 +5,20 @@
 	xmlns:fx="javafx:com.sun.javafx.tools.ant"
 	>
 
-	<property name="JDK" location="C:/Program Files (x86)/Java/jdk1.7.0"/>
-	<property name="LWJGL_PATH" location="lib/lwjgl-2.9.0"/>
-	<property name="LWJGL_PATH_NATIVE" location="${LWJGL_PATH}/native/windows"/>
+	<property name="JDK" location="C:/Program Files/Java/jdk1.8.0"/>
+	<property name="LWJGL_PATH" location="lib/lwjgl-2.9.2"/>
+
+	<condition property="platform" value="windows">
+		<os family="Windows"/>
+	</condition>
+	<condition property="platform" value="linux">
+		<os name="Linux"/>
+	</condition>
+	<condition property="platform" value="macosx">
+		<os name="Mac OS X"/>
+	</condition>
+
+	<property name="LWJGL_PATH_NATIVE" location="${LWJGL_PATH}/native/${platform}"/>
 
 	<taskdef
 		resource="com/sun/javafx/tools/ant/antlib.xml"
@@ -16,7 +27,7 @@
 		/>
 
 	<property name="lib.javafx" location="${JDK}/jre/lib/jfxrt.jar"/>
-	<property name="lib.lwjgl" location="lib/lwjgl-2.9.0/jar/lwjgl.jar"/>
+	<property name="lib.lwjgl" location="${LWJGL_PATH}/jar/lwjgl.jar"/>
 
 	<property name="lib.JARS" location="${lib.javafx};${lib.lwjgl};"/>
 
@@ -74,8 +85,8 @@
 	<target name="compile" description="Compiles the project source code." depends="-initialize">
 		<javac debug="yes"
 		       destdir="BIN"
-		       source="1.6"
-		       target="1.6"
+		       source="1.7"
+		       target="1.7"
 		       classpath="${lib.JARS}"
 		       taskname="Compiling"
 		       includeantruntime="false"
@@ -92,23 +103,23 @@
 
 	<target name="-lwjgl-jars" description="Builds the LWJGL OS/Arch-specified jar files.">
 		<jar destfile="RELEASE/lwjgl-windows-amd64.jar">
-			<fileset dir="lib/lwjgl-2.9.0/native/windows" includes="lwjgl64.dll"/>
+			<fileset dir="${LWJGL_PATH}/native/windows" includes="lwjgl64.dll"/>
 		</jar>
 
 		<jar destfile="RELEASE/lwjgl-windows-x86.jar">
-			<fileset dir="lib/lwjgl-2.9.0/native/windows" includes="lwjgl.dll"/>
+			<fileset dir="${LWJGL_PATH}/native/windows" includes="lwjgl.dll"/>
 		</jar>
 
 		<jar destfile="RELEASE/lwjgl-linux-amd64.jar">
-			<fileset dir="lib/lwjgl-2.9.0/native/linux" includes="liblwjgl64.so"/>
+			<fileset dir="${LWJGL_PATH}/native/linux" includes="liblwjgl64.so"/>
 		</jar>
 
 		<jar destfile="RELEASE/lwjgl-linux-x86.jar">
-			<fileset dir="lib/lwjgl-2.9.0/native/linux" includes="liblwjgl.so"/>
+			<fileset dir="${LWJGL_PATH}/native/linux" includes="liblwjgl.so"/>
 		</jar>
 
 		<jar destfile="RELEASE/lwjgl-macosx.jar">
-			<fileset dir="lib/lwjgl-2.9.0/native/macosx" includes="liblwjgl.jnilib"/>
+			<fileset dir="${LWJGL_PATH}/native/macosx" includes="liblwjgl.jnilib"/>
 		</jar>
 	</target>
 
@@ -137,7 +148,7 @@
 			keyPass="lwjglfx"
 			>
 			<fx:fileset dir="RELEASE" includes="*.jar"/>
-			<fx:fileset dir="lib/lwjgl-2.9.0/jar" includes="lwjgl.jar"/>
+			<fx:fileset dir="${LWJGL_PATH}/jar" includes="lwjgl.jar"/>
 		</fx:signjar>
 	</target>
 

@@ -51,7 +51,6 @@ import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 
 import static org.lwjgl.opengl.AMDDebugOutput.*;
-import static org.lwjgl.opengl.ARBDebugOutput.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.glGetInteger;
 import static org.lwjgl.opengl.GL30.*;
@@ -117,11 +116,11 @@ final class Gears {
 		else
 			maxSamples = 1;
 
-		if ( caps.GL_KHR_debug )
+		if ( caps.GL_KHR_debug ) {
 			glDebugMessageCallback(new KHRDebugCallback());
-		else if ( caps.GL_ARB_debug_output )
-			glDebugMessageCallbackARB(new ARBDebugOutputCallback());
-		else if ( caps.GL_AMD_debug_output )
+			glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, null, false); // NV: Buffer object mallocs
+			glDebugMessageControl(GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_PERFORMANCE, GL_DEBUG_SEVERITY_MEDIUM, null, false); // NV: Pixel-transfer synchronized with rendering
+		} else if ( caps.GL_AMD_debug_output )
 			glDebugMessageCallbackAMD(new AMDDebugOutputCallback());
 
 		this.renderStreamFactory = StreamUtil.getRenderStreamImplementation();
@@ -458,8 +457,7 @@ final class Gears {
 			glVertex3f(r1 * cos(angle), r1 * sin(angle), width * 0.5f);
 			if ( i < teeth ) {
 				glVertex3f(r0 * cos(angle), r0 * sin(angle), width * 0.5f);
-				glVertex3f(r1 * cos(angle + 3.0f * da), r1 * sin(angle + 3.0f * da),
-				           width * 0.5f);
+				glVertex3f(r1 * cos(angle + 3.0f * da), r1 * sin(angle + 3.0f * da), width * 0.5f);
 			}
 		}
 		glEnd();

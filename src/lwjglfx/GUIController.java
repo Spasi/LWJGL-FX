@@ -43,6 +43,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 
+import javafx.animation.AnimationTimer;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -61,6 +62,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
+import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.AnchorPane;
@@ -158,6 +160,18 @@ public class GUIController implements Initializable {
 
 			private WritableImage renderImage;
 
+			private long frame;
+			private long lastUpload;
+
+			{
+				new AnimationTimer() {
+					@Override
+					public void handle(final long now) {
+						frame++;
+					}
+				}.start();
+			}
+
 			public int getWidth() {
 				return (int)gearsView.getFitWidth();
 			}
@@ -168,7 +182,6 @@ public class GUIController implements Initializable {
 
 			public void process(final int width, final int height, final ByteBuffer data, final int stride, final Semaphore signal) {
 				// This method runs in the background rendering thread
-				// TODO: Run setPixels on the PlatformImage in this thread, run pixelsDirty on JFX application thread with runLater.
 				Platform.runLater(new Runnable() {
 					public void run() {
 						try {
@@ -182,8 +195,18 @@ public class GUIController implements Initializable {
 								gearsView.setImage(renderImage);
 							}
 
+							// Throttling, only update the JavaFX view once per frame.
+							// *NOTE*: The +1 is weird here, but apparently setPixels triggers a new pulse within the current frame.
+							// If we ignore that, we'd get a) worse performance from uploading double the frames and b) exceptions
+							// on certain configurations (e.g. Nvidia GPU with the D3D pipeline).
+							if ( frame <= lastUpload + 1 )
+								return;
+
+							lastUpload = frame;
+
 							// Upload the image to JavaFX
-							renderImage.getPixelWriter().setPixels(0, 0, width, height, PixelFormat.getByteBgraPreInstance(), data, stride);
+							PixelWriter pw = renderImage.getPixelWriter();
+							pw.setPixels(0, 0, width, height, pw.getPixelFormat(), data, stride);
 						} finally {
 							// Notify the render thread that we're done processing
 							signal.release();
